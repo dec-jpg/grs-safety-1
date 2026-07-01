@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GRS Safety — Sign in</title>
+<style>
+  :root{--grs:#EC4B32;--grs-dark:#C53A23;--ink:#17150f;--muted:#6f685d;
+    --line:#e7e2d9;--paper:#f4f1ea;--card:#fff;--slab:#23211b;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:var(--slab);color:var(--ink);
+    font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:20px;}
+  .box{background:var(--card);border-radius:16px;width:100%;max-width:380px;
+    padding:36px 34px;box-shadow:0 20px 60px rgba(0,0,0,.4);}
+  .logo{height:38px;margin-bottom:22px;}
+  h1{font-size:19px;margin:0 0 4px;font-weight:800;letter-spacing:-.02em;}
+  .sub{font-size:13px;color:var(--muted);margin:0 0 26px;}
+  label{display:block;font-size:12px;font-weight:700;margin:0 0 6px;letter-spacing:.02em;}
+  input{width:100%;padding:12px 13px;border:1px solid var(--line);border-radius:9px;
+    font-size:15px;font-family:inherit;margin-bottom:16px;}
+  input:focus{outline:2px solid var(--grs);outline-offset:1px;border-color:var(--grs);}
+  button{width:100%;background:var(--grs);color:#fff;border:none;padding:13px;border-radius:9px;
+    font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;transition:.15s;}
+  button:hover{background:var(--grs-dark);}
+  button:disabled{opacity:.5;cursor:not-allowed;}
+  .err{background:#fbeae7;color:#c0392b;font-size:13px;padding:10px 12px;border-radius:8px;
+    margin-bottom:16px;display:none;}
+  .err.show{display:block;}
+  .foot{text-align:center;font-size:11px;color:var(--muted);margin-top:22px;}
+</style>
+</head>
+<body>
+  <div class="box">
+    <img class="logo" id="logo" alt="GRS">
+    <h1>Safety Dashboard</h1>
+    <p class="sub">GRS Contractors Ltd · sign in to continue</p>
+    <div class="err" id="err"></div>
+    <label for="email">Email</label>
+    <input type="email" id="email" autocomplete="username" autofocus>
+    <label for="password">Password</label>
+    <input type="password" id="password" autocomplete="current-password">
+    <button id="btn">Sign in</button>
+    <div class="foot">Oversight by Safety Simplified Ltd</div>
+  </div>
+<script src="/logo.js"></script>
+<script>
+  // logo injected at build (kept inline so the page is standalone)
+  document.getElementById('logo').src = window.__GRS_LOGO__ || '';
+  const err = document.getElementById('err');
+  const btn = document.getElementById('btn');
+
+  async function doLogin(){
+    err.classList.remove('show');
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    if(!email || !password){ show('Enter your email and password.'); return; }
+    btn.disabled = true; btn.textContent = 'Signing in…';
+    try{
+      const r = await fetch('/api/auth/login', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ email, password })
+      });
+      const data = await r.json();
+      if(!r.ok){ show(data.error || 'Sign in failed.'); return; }
+      location.href = '/';
+    }catch(e){ show('Network error. Try again.'); }
+    finally{ btn.disabled = false; btn.textContent = 'Sign in'; }
+  }
+  function show(m){ err.textContent = m; err.classList.add('show'); }
+
+  btn.addEventListener('click', doLogin);
+  document.getElementById('password').addEventListener('keydown', e => { if(e.key==='Enter') doLogin(); });
+</script>
+</body>
+</html>

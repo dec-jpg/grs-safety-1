@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Site Attendance</title>
+<style>
+  :root{
+    --acc:#2F6F73; --acc-dark:#245357; --acc-soft:#e6f0f0;
+    --ink:#17150f; --muted:#6f685d; --faint:#9a9388;
+    --line:#e7e2d9; --paper:#f4f1ea; --card:#fff;
+    --ok:#2f7d4f; --okbg:#e9f4ee; --bad:#c0392b; --badbg:#fbeae7;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:720px;margin:0 auto;padding:0 18px 60px;}
+  header{padding:22px 0 16px;border-bottom:2px solid var(--acc);display:flex;
+    align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;}
+  h1{font-size:20px;margin:0;font-weight:800;letter-spacing:-.02em;}
+  .who{font-size:12px;color:var(--muted);}
+  .who a{color:var(--acc);font-weight:700;text-decoration:none;cursor:pointer;}
+  select,input{font-family:inherit;font-size:15px;border:1px solid var(--line);
+    background:#fff;border-radius:9px;padding:11px 13px;color:var(--ink);width:100%;}
+  select:focus,input:focus{outline:2px solid var(--acc);outline-offset:1px;border-color:var(--acc);}
+  .sitepick{margin:20px 0 8px;}
+  .sitepick label{font-size:12px;font-weight:700;color:var(--faint);text-transform:uppercase;
+    letter-spacing:.06em;display:block;margin-bottom:6px;}
+  .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0;}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;}
+  .tile .k{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:700;}
+  .tile .v{font-size:30px;font-weight:800;line-height:1;margin-top:8px;font-variant-numeric:tabular-nums;}
+  .tile.accent .v{color:var(--acc);}
+  .tile.flag .v{color:var(--bad);}
+  .btn{background:var(--acc);color:#fff;border:none;padding:13px 18px;border-radius:10px;
+    font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;width:100%;}
+  .btn:hover{background:var(--acc-dark);}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+  .sec-head{display:flex;align-items:center;justify-content:space-between;margin:26px 0 12px;}
+  .sec-head h2{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+    font-weight:700;margin:0;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:13px;overflow:hidden;}
+  .row{display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid var(--line);}
+  .row:last-child{border-bottom:none;}
+  .row .n{flex:1;}
+  .row .n .nm{font-weight:600;font-size:14.5px;}
+  .row .n .mt{font-size:12px;color:var(--faint);margin-top:1px;}
+  .row .t{font-family:var(--mono);font-size:12.5px;color:var(--muted);}
+  .tag{font-size:10px;font-weight:700;font-family:var(--mono);padding:2px 6px;border-radius:5px;
+    text-transform:uppercase;letter-spacing:.03em;margin-left:6px;vertical-align:middle;}
+  .tag.staff{background:var(--okbg);color:var(--ok);}
+  .tag.subbie{background:#fbf2dd;color:#b6852a;}
+  .tag.visitor{background:var(--paper);color:var(--muted);}
+  .tag.flag{background:var(--badbg);color:var(--bad);}
+  .out{background:#fff;border:1px solid var(--line);color:var(--muted);font-size:12px;
+    font-weight:700;padding:7px 12px;border-radius:8px;cursor:pointer;font-family:inherit;}
+  .out:hover{border-color:var(--acc);color:var(--acc);}
+  .empty{padding:30px;text-align:center;color:var(--faint);font-size:14px;}
+  .modal-bg{position:fixed;inset:0;background:rgba(23,21,15,.5);display:none;
+    align-items:center;justify-content:center;padding:18px;z-index:50;}
+  .modal-bg.show{display:flex;}
+  .modal{background:#fff;border-radius:14px;width:100%;max-width:440px;padding:24px;}
+  .modal h3{margin:0 0 16px;font-size:17px;}
+  .modal label{display:block;font-size:12px;font-weight:700;margin:12px 0 6px;}
+  .modal .chk{display:flex;align-items:center;gap:9px;font-weight:500;margin:14px 0 4px;}
+  .modal .chk input{width:auto;}
+  .modal-act{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;}
+  .ghost{background:#fff;border:1px solid var(--line);color:var(--ink);padding:11px 16px;
+    border-radius:9px;font-weight:600;cursor:pointer;font-family:inherit;font-size:14px;}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);
+    color:#fff;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;
+    opacity:0;transition:.25s;pointer-events:none;z-index:60;}
+  .toast.show{opacity:1;}
+  .live{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-family:var(--mono);
+    color:var(--ok);font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
+  .live .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Site Attendance</h1>
+      <div class="live"><span class="dot"></span>Live</div>
+    </div>
+    <div class="who">Signed in as <b id="who">…</b> · <a id="logout">Sign out</a></div>
+  </header>
+
+  <div class="sitepick">
+    <label for="site">Site</label>
+    <select id="site" onchange="load()"></select>
+  </div>
+
+  <div class="tiles">
+    <div class="tile accent"><div class="k">On site now</div><div class="v" id="t_on">–</div></div>
+    <div class="tile"><div class="k">Own staff</div><div class="v" id="t_staff">–</div></div>
+    <div class="tile flag"><div class="k">Induction flags</div><div class="v" id="t_flag">–</div></div>
+  </div>
+
+  <button class="btn" onclick="signInModal()">+ Sign someone in</button>
+
+  <div class="sec-head"><h2>On site now</h2></div>
+  <div class="card" id="onsite"><div class="empty">Loading…</div></div>
+</div>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const el = id => document.getElementById(id);
+async function api(path, opts={}){
+  const r = await fetch('/api'+path, {
+    headers:{'Content-Type':'application/json'}, ...opts,
+    body: opts.body ? JSON.stringify(opts.body) : undefined
+  });
+  if(r.status===401){ location.href='/login.html'; throw new Error('auth'); }
+  const data = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(data.error||'Request failed');
+  return data;
+}
+function toast(m){ const t=el('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
+function openModal(h){ el('modal').innerHTML=h; el('modalBg').classList.add('show'); }
+function closeModal(){ el('modalBg').classList.remove('show'); }
+el('modalBg').addEventListener('click',e=>{ if(e.target===el('modalBg')) closeModal(); });
+
+const fmtTime = t => t ? new Date(t).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '—';
+const tag = t => t==='staff'?'staff':t==='subbie'?'subbie':'visitor';
+const tagLabel = t => t==='staff'?'Staff':t==='subbie'?'Sub':'Visitor';
+
+let SITES = [];
+function siteId(){ return Number(el('site').value); }
+
+async function boot(){
+  try{
+    const me = await api('/auth/me');
+    el('who').textContent = me.user.name;
+  }catch(e){ return; }
+  SITES = await api('/sites');
+  el('site').innerHTML = SITES.map(s=>`<option value="${s.id}">${s.ref} — ${s.name}</option>`).join('');
+  await load();
+}
+
+async function load(){
+  const sid = siteId();
+  const [sum, on] = await Promise.all([
+    api('/attendance/summary?site_id='+sid),
+    api('/attendance/on-site?site_id='+sid)
+  ]);
+  el('t_on').textContent = sum.on_site;
+  el('t_staff').textContent = sum.staff;
+  el('t_flag').textContent = sum.not_inducted;
+  el('onsite').innerHTML = on.length ? on.map(a=>`
+    <div class="row">
+      <div class="n"><div class="nm">${esc(a.name)} <span class="tag ${tag(a.type)}">${tagLabel(a.type)}</span>${a.inducted?'':' <span class="tag flag">No induction</span>'}</div>
+        <div class="mt">${esc(a.company||'')}${a.role?' · '+esc(a.role):''}</div></div>
+      <div class="t">in ${fmtTime(a.in_at)}</div>
+      <button class="out" onclick="signOut(${a.id},'${esc(a.name)}')">Sign out</button>
+    </div>`).join('') : '<div class="empty">Nobody signed in on this site.</div>';
+}
+
+function signInModal(){
+  openModal(`
+    <h3>Sign in to site</h3>
+    <label>Name</label><input id="si_name" placeholder="Full name" autofocus>
+    <label>Company</label><input id="si_company" placeholder="Own firm or subcontractor">
+    <label>Role</label><input id="si_role" placeholder="e.g. Operative, 360 Driver, Visitor">
+    <label>Type</label>
+    <select id="si_type"><option value="staff">Own staff</option><option value="subbie">Subcontractor</option><option value="visitor">Visitor</option></select>
+    <label class="chk"><input type="checkbox" id="si_ind" checked> Site induction completed &amp; valid</label>
+    <div class="modal-act"><button class="ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn" style="width:auto" onclick="doSignIn()">Sign in</button></div>`);
+}
+async function doSignIn(){
+  const name = el('si_name').value.trim();
+  if(!name){ toast('Enter a name'); return; }
+  try{
+    await api('/attendance/sign-in', { method:'POST', body:{
+      name, company:el('si_company').value.trim()||null, role:el('si_role').value.trim()||null,
+      site_id:siteId(), type:el('si_type').value, inducted:el('si_ind').checked
+    }});
+    closeModal(); toast(`${name} signed in`); load();
+  }catch(e){ toast(e.message); }
+}
+
+async function signOut(id, name){
+  try{
+    await api('/attendance/'+id+'/sign-out', { method:'POST' });
+    toast(`${name} signed out`); load();
+  }catch(e){ toast(e.message); }
+}
+
+el('logout').addEventListener('click', async ()=>{ await api('/auth/logout',{method:'POST'}); location.href='/login.html'; });
+function esc(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+boot();
+// light auto-refresh so the register stays current on a shared tablet
+setInterval(()=>{ if(!el('modalBg').classList.contains('show')) load().catch(()=>{}); }, 20000);
+</script>
+</body>
+</html>
