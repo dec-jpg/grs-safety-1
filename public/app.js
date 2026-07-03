@@ -110,9 +110,112 @@ function preview(name, desc){
     <h3>${name}</h3><p>${desc} This module is mapped out in the demo and will be switched on once the audits area is bedded in with GRS.</p></div>`;
 }
 
+// ============================================================
+//  SITE ATTENDANCE — live, talks to /api/attendance
+// ============================================================
+let ATT_SITE = 0; // 0 = all sites
+const fmtTime = t => t ? new Date(t).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}) : '—';
+const attTag = t => t==='staff' ? '<span class="pill ok" style="font-size:9px;padding:2px 7px">GRS</span>'
+  : t==='subbie' ? '<span class="pill warn" style="font-size:9px;padding:2px 7px">Sub</span>'
+  : '<span class="pill" style="font-size:9px;padding:2px 7px;background:var(--paper);color:var(--muted)">Visitor</span>';
+
+async function vAttendance(){
+  if(!STATE.sites.length) STATE.sites = await api('/sites');
+  const q = ATT_SITE ? ('?site_id='+ATT_SITE) : '';
+  const [sum, on, today] = await Promise.all([
+    api('/attendance/summary'+q),
+    api('/attendance/on-site'+q),
+    api('/attendance/today'+q)
+  ]);
+  const siteOpts = `<option value="0">All sites</option>` + STATE.sites.map(s=>
+    `<option value="${s.id}" ${s.id===ATT_SITE?'selected':''}>${s.ref} — ${esc(s.name)}</option>`).join('');
+
+  const onHtml = on.length ? `<table>
+    <thead><tr><th>Name</th><th>Company / role</th><th class="num">Signed in</th><th>Induction</th><th class="num">Action</th></tr></thead>
+    <tbody>${on.map(a=>`<tr>
+      <td><div class="site-name">${esc(a.name)} ${attTag(a.type)}</div>
+        <div class="site-meta">${ATT_SITE?'':(a.site_ref+' · ')}in ${fmtTime(a.in_at)}</div></td>
+      <td style="font-size:12.5px;color:var(--muted)">${esc(a.company||'—')}<br>${esc(a.role||'')}</td>
+      <td class="num" style="font-family:var(--mono);font-size:12.5px">${fmtTime(a.in_at)}</td>
+      <td>${a.inducted?'<span class="pill ok">Valid</span>':'<span class="pill bad">Not inducted</span>'}</td>
+      <td class="num"><button class="btn-sm" onclick="attSignOut(${a.id},'${esc(a.name)}')">Sign out</button></td>
+    </tr>`).join('')}</tbody></table>`
+    : `<div class="loading">Nobody currently signed in${ATT_SITE?' on this site':''}.</div>`;
+
+  const todayHtml = today.length ? `<table>
+    <thead><tr><th>Name</th><th>Company</th><th class="num">In</th><th class="num">Out</th></tr></thead>
+    <tbody>${today.map(a=>`<tr>
+      <td class="site-name">${esc(a.name)} ${attTag(a.type)}</td>
+      <td style="font-size:12.5px;color:var(--muted)">${esc(a.company||'—')}</td>
+      <td class="num" style="font-family:var(--mono);font-size:12.5px">${fmtTime(a.in_at)}</td>
+      <td class="num" style="font-family:var(--mono);font-size:12.5px;color:${a.out_at?'var(--ink)':'var(--ok)'}">${a.out_at?fmtTime(a.out_at):'on site'}</td>
+    </tr>`).join('')}</tbody></table>`
+    : `<div class="loading">No attendance today${ATT_SITE?' on this site':''} yet.</div>`;
+
+  return `
+  <div class="sec"><div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+    <select id="att_site" style="font-family:inherit;font-size:14px;border:1px solid var(--line);background:#fff;border-radius:9px;padding:10px 13px;color:var(--ink);font-weight:600;min-width:240px"
+      onchange="ATT_SITE=Number(this.value);show('attendance')">${siteOpts}</select>
+    <button class="btn-primary" onclick="attSignInModal()">+ Sign someone in</button>
+  </div></div>
+  <div class="sec"><div class="grid g4">
+    <div class="stat accent"><div class="k">On site now</div><div class="v">${sum.on_site}</div>
+      <div class="foot">${ATT_SITE?'On this site':'Across all sites'}</div></div>
+    <div class="stat"><div class="k">GRS staff</div><div class="v">${sum.staff}</div>
+      <div class="foot">Directly employed</div></div>
+    <div class="stat"><div class="k">Subbies &amp; visitors</div><div class="v">${sum.others}</div>
+      <div class="foot">Signed on today</div></div>
+    <div class="stat"><div class="k">Induction flags</div>
+      <div class="v" style="color:${sum.not_inducted?'var(--grs)':'var(--ink)'}">${sum.not_inducted}</div>
+      <div class="foot">${sum.not_inducted?'On site without induction':'All inducted'}</div></div>
+  </div></div>
+  <div class="sec"><div class="sec-head"><h2>On site now</h2><span class="rule"></span></div>
+    <div class="card">${onHtml}</div></div>
+  <div class="sec"><div class="sec-head"><h2>Today's log</h2><span class="rule"></span></div>
+    <div class="card">${todayHtml}</div></div>`;
+}
+
+function attSignInModal(){
+  const opts = STATE.sites.map(s=>`<option value="${s.id}" ${s.id===(ATT_SITE||STATE.sites[0]?.id)?'selected':''}>${s.ref} — ${esc(s.name)}</option>`).join('');
+  openModal(`
+    <h3>Sign in to site</h3>
+    <label>Site</label><select id="si_site">${opts}</select>
+    <label>Name</label><input id="si_name" placeholder="Full name">
+    <label>Company</label><input id="si_company" placeholder="GRS Contractors or subcontractor">
+    <label>Role</label><input id="si_role" placeholder="e.g. Operative, 360 Driver, Visitor">
+    <label>Type</label>
+    <select id="si_type"><option value="staff">GRS staff</option><option value="subbie">Subcontractor</option><option value="visitor">Visitor</option></select>
+    <label style="display:flex;align-items:center;gap:9px;font-weight:500;cursor:pointer;margin-top:14px">
+      <input type="checkbox" id="si_ind" checked style="width:auto"> Site induction completed &amp; valid</label>
+    <div class="modal-act"><button class="btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn-primary" onclick="attDoSignIn()">Sign in</button></div>`);
+}
+
+async function attDoSignIn(){
+  const name = el('si_name').value.trim();
+  if(!name){ toast('Enter a name'); return; }
+  try{
+    await api('/attendance/sign-in', { method:'POST', body:{
+      name, company: el('si_company').value.trim()||null, role: el('si_role').value.trim()||null,
+      site_id: Number(el('si_site').value), type: el('si_type').value, inducted: el('si_ind').checked
+    }});
+    closeModal(); toast(`${name} signed in`);
+    await show('attendance'); refreshCounts();
+  }catch(e){ toast(e.message); }
+}
+
+async function attSignOut(id, name){
+  try{
+    await api('/attendance/'+id+'/sign-out', { method:'POST' });
+    toast(`${name} signed out`);
+    await show('attendance'); refreshCounts();
+  }catch(e){ toast(e.message); }
+}
+
 const VIEWS = {
   overview:{t:"Dashboard", c:"Safety overview · all active sites", r:vOverview},
   audits:{t:"Audits", c:"Findings, actions and compliance scores", r:vAudits},
+  attendance:{t:"Site attendance", c:"Who's on site · sign in & out", r:vAttendance},
   training:{t:"Training", c:"Competency matrix and certificate currency",
     r:()=>preview('Training &amp; Competency','Track tickets and certificate expiry across site crews.')},
   rams:{t:"RAMS", c:"Method statements and accreditation",
@@ -192,6 +295,11 @@ async function refreshCounts(){
   try{
     const open = await api('/findings?status=open');
     el('ct-audits').textContent = open.length;
+  }catch{}
+  try{
+    const s = await api('/attendance/summary');
+    const c = document.getElementById('ct-attendance');
+    if(c) c.textContent = s.on_site;
   }catch{}
 }
 
