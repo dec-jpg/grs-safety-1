@@ -9,12 +9,13 @@ import sitesRoutes from './routes/sites.js';
 import findingsRoutes from './routes/findings.js';
 import auditsRoutes from './routes/audits.js';
 import attendanceRoutes from './routes/attendance.js';
+import publicRoutes from './routes/public.js';
 
 dotenv.config();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));  // sign-in photos ride in JSON
 app.use(cookieParser());
 
 // API
@@ -23,6 +24,7 @@ app.use('/api/sites', sitesRoutes);
 app.use('/api/findings', findingsRoutes);
 app.use('/api/audits', auditsRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/public', publicRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
