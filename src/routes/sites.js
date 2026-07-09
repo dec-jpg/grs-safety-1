@@ -9,7 +9,7 @@ router.use(requireAuth);
 // List sites with live open-finding counts and latest audit
 router.get('/', wrap(async (req, res) => {
   const { rows } = await query(`
-    SELECT s.id, s.ref, s.name, s.active,
+    SELECT s.id, s.ref, s.name, s.active, s.lat, s.lng, s.signin_token, s.kiosk_token,
       (SELECT COUNT(*) FROM findings f WHERE f.site_id = s.id AND f.status = 'open') AS open_findings,
       (SELECT a.audited_on FROM audits a WHERE a.site_id = s.id ORDER BY a.audited_on DESC LIMIT 1) AS last_audited,
       (SELECT a.compliance FROM audits a WHERE a.site_id = s.id ORDER BY a.audited_on DESC LIMIT 1) AS compliance
