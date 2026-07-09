@@ -15,6 +15,7 @@ dotenv.config();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
+app.set('trust proxy', 1);   // Railway sits behind a proxy
 app.use(express.json({ limit: '1mb' }));  // sign-in photos ride in JSON
 app.use(cookieParser());
 
