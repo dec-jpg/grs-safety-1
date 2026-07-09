@@ -119,6 +119,27 @@ const attTag = t => t==='staff' ? '<span class="pill ok" style="font-size:9px;pa
   : t==='subbie' ? '<span class="pill warn" style="font-size:9px;padding:2px 7px">Sub</span>'
   : '<span class="pill" style="font-size:9px;padding:2px 7px;background:var(--paper);color:var(--muted)">Visitor</span>';
 
+// One-shot device position. Resolves null on denial/timeout — never blocks the action.
+function getPos(timeoutMs=6000){
+  return new Promise(resolve=>{
+    if(!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      p=>resolve({lat:p.coords.latitude, lng:p.coords.longitude, acc:Math.round(p.coords.accuracy)}),
+      ()=>resolve(null),
+      {enableHighAccuracy:true, timeout:timeoutMs, maximumAge:30000}
+    );
+  });
+}
+
+function locPill(a){
+  if(a.in_lat==null) return '<span class="pill" style="background:var(--paper);color:var(--muted)">No location</span>';
+  if(a.in_dist_m==null) return '<span class="pill ok">📍 Recorded</span>';
+  const d = a.in_dist_m;
+  const label = d>=1000 ? (d/1000).toFixed(1)+'km' : d+'m';
+  return d<=400 ? `<span class="pill ok">📍 ${label} from site</span>`
+                : `<span class="pill warn">📍 ${label} from site</span>`;
+}
+
 async function vAttendance(){
   if(!STATE.sites.length) STATE.sites = await api('/sites');
   const q = ATT_SITE ? ('?site_id='+ATT_SITE) : '';
@@ -131,12 +152,16 @@ async function vAttendance(){
     `<option value="${s.id}" ${s.id===ATT_SITE?'selected':''}>${s.ref} — ${esc(s.name)}</option>`).join('');
 
   const onHtml = on.length ? `<table>
-    <thead><tr><th>Name</th><th>Company / role</th><th class="num">Signed in</th><th>Induction</th><th class="num">Action</th></tr></thead>
+    <thead><tr><th></th><th>Name</th><th>Company / role</th><th class="num">Signed in</th><th>Location</th><th>Induction</th><th class="num">Action</th></tr></thead>
     <tbody>${on.map(a=>`<tr>
+      <td style="width:52px">${a.has_photo
+        ? `<img src="/api/attendance/${a.id}/photo" alt="" style="width:42px;height:42px;object-fit:cover;border-radius:9px;cursor:pointer;border:1px solid var(--line)" onclick="photoModal(${a.id},'${esc(a.name)}')">`
+        : `<div style="width:42px;height:42px;border-radius:9px;background:var(--paper);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--faint)">—</div>`}</td>
       <td><div class="site-name">${esc(a.name)} ${attTag(a.type)}</div>
         <div class="site-meta">${ATT_SITE?'':(a.site_ref+' · ')}in ${fmtTime(a.in_at)}</div></td>
       <td style="font-size:12.5px;color:var(--muted)">${esc(a.company||'—')}<br>${esc(a.role||'')}</td>
       <td class="num" style="font-family:var(--mono);font-size:12.5px">${fmtTime(a.in_at)}</td>
+      <td>${locPill(a)}</td>
       <td>${a.inducted?'<span class="pill ok">Valid</span>':'<span class="pill bad">Not inducted</span>'}</td>
       <td class="num"><button class="btn-sm" onclick="attSignOut(${a.id},'${esc(a.name)}')">Sign out</button></td>
     </tr>`).join('')}</tbody></table>`
@@ -156,8 +181,15 @@ async function vAttendance(){
   <div class="sec"><div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
     <select id="att_site" style="font-family:inherit;font-size:14px;border:1px solid var(--line);background:#fff;border-radius:9px;padding:10px 13px;color:var(--ink);font-weight:600;min-width:240px"
       onchange="ATT_SITE=Number(this.value);show('attendance')">${siteOpts}</select>
-    <button class="btn-primary" onclick="attSignInModal()">+ Sign someone in</button>
-  </div></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      ${ATT_SITE?`<button class="btn-ghost" onclick="copySigninLink()">🔗 Copy sign-in link</button>
+      <button class="btn-ghost" onclick="copyKioskLink()">📱 Copy tablet (kiosk) link</button>
+      <button class="btn-ghost" onclick="setSiteLocation()">📍 Set site location here</button>`:''}
+      <button class="btn-primary" onclick="attSignInModal()">+ Sign someone in</button>
+    </div>
+  </div>
+  ${ATT_SITE && !STATE.sites.find(s=>s.id===ATT_SITE)?.lat ? `<p style="font-size:12px;color:var(--muted);margin:10px 0 0">No saved location for this site yet — sign-ins record GPS but can't show distance. Stand on site and tap "Set site location here" once.</p>`:''}
+  </div>
   <div class="sec"><div class="grid g4">
     <div class="stat accent"><div class="k">On site now</div><div class="v">${sum.on_site}</div>
       <div class="foot">${ATT_SITE?'On this site':'Across all sites'}</div></div>
@@ -194,21 +226,72 @@ function attSignInModal(){
 async function attDoSignIn(){
   const name = el('si_name').value.trim();
   if(!name){ toast('Enter a name'); return; }
+  const pos = await getPos();   // null if denied/unavailable — sign-in proceeds regardless
   try{
     await api('/attendance/sign-in', { method:'POST', body:{
       name, company: el('si_company').value.trim()||null, role: el('si_role').value.trim()||null,
-      site_id: Number(el('si_site').value), type: el('si_type').value, inducted: el('si_ind').checked
+      site_id: Number(el('si_site').value), type: el('si_type').value, inducted: el('si_ind').checked,
+      lat: pos?.lat, lng: pos?.lng, acc: pos?.acc
     }});
-    closeModal(); toast(`${name} signed in`);
+    closeModal(); toast(pos ? `${name} signed in 📍` : `${name} signed in (no location)`);
     await show('attendance'); refreshCounts();
   }catch(e){ toast(e.message); }
 }
 
 async function attSignOut(id, name){
+  const pos = await getPos(3000);
   try{
-    await api('/attendance/'+id+'/sign-out', { method:'POST' });
+    await api('/attendance/'+id+'/sign-out', { method:'POST', body:{ lat: pos?.lat, lng: pos?.lng } });
     toast(`${name} signed out`);
     await show('attendance'); refreshCounts();
+  }catch(e){ toast(e.message); }
+}
+
+
+
+function photoModal(id, name){
+  openModal(`
+    <h3>${name} — sign-in photo</h3>
+    <img src="/api/attendance/${id}/photo" style="width:100%;border-radius:12px;margin:6px 0 4px" alt="Sign-in photo">
+    <p style="font-size:12px;color:var(--muted);margin:8px 0 0">Taken at the moment of sign-in, with location and time.</p>
+    <div class="modal-act"><button class="btn-ghost" onclick="closeModal()">Close</button></div>`);
+}
+
+function copyKioskLink(){
+  const site = STATE.sites.find(s=>s.id===ATT_SITE);
+  if(!site) return;
+  if(!site.kiosk_token){ toast('Run the database update first — no kiosk token yet'); return; }
+  if(!site.lat){ toast('Set the site location first'); return; }
+  const url = location.origin + '/signin.html?k=' + site.kiosk_token;
+  navigator.clipboard.writeText(url).then(
+    ()=>toast(site.ref + ' kiosk link copied — put this on the site tablet ONLY'),
+    ()=>prompt('Copy this link:', url)
+  );
+}
+
+function copySigninLink(){
+  const site = STATE.sites.find(s=>s.id===ATT_SITE);
+  if(!site) return;
+  if(!site.signin_token){ toast('Run the database update first — no link token yet'); return; }
+  if(!site.lat){ toast('Set the site location first — the link refuses sign-ins without it'); return; }
+  const url = location.origin + '/signin.html?t=' + site.signin_token;
+  navigator.clipboard.writeText(url).then(
+    ()=>toast(site.ref + ' sign-in link copied — send it to the crew'),
+    ()=>prompt('Copy this link:', url)
+  );
+}
+
+async function setSiteLocation(){
+  const site = STATE.sites.find(s=>s.id===ATT_SITE);
+  if(!site) return;
+  toast('Getting position…');
+  const pos = await getPos(10000);
+  if(!pos){ toast('Could not get a location — allow location access and try again'); return; }
+  try{
+    await api('/attendance/site-location', { method:'POST', body:{ site_id: ATT_SITE, lat: pos.lat, lng: pos.lng } });
+    site.lat = pos.lat; site.lng = pos.lng;
+    toast(`${site.ref} location saved (±${pos.acc}m)`);
+    await show('attendance');
   }catch(e){ toast(e.message); }
 }
 
