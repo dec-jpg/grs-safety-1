@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Site Sign-in</title>
+<style>
+  :root{
+    --grs:#EC4B32; --grs-dark:#C53A23; --ink:#17150f; --muted:#6f685d;
+    --line:#e7e2d9; --paper:#f4f1ea; --ok:#2f7d4f; --okbg:#e9f4ee;
+    --bad:#c0392b; --badbg:#fbeae7; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;min-height:100vh;display:flex;flex-direction:column;}
+  .wrap{width:100%;max-width:420px;margin:0 auto;padding:26px 20px 40px;flex:1;}
+  .brand{text-align:center;margin-bottom:6px;}
+  .brand .t{font-size:20px;font-weight:800;letter-spacing:-.02em;}
+  .brand .s{font-size:12.5px;color:var(--muted);margin-top:3px;}
+  .site{background:#fff;border:1px solid var(--line);border-radius:13px;padding:14px 18px;
+    text-align:center;margin:18px 0 22px;}
+  .site .r{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--grs);letter-spacing:.05em;}
+  .site .n{font-size:15px;font-weight:700;margin-top:2px;}
+  label{display:block;font-size:12px;font-weight:700;margin:14px 0 6px;}
+  input,select{width:100%;font-family:inherit;font-size:16px;border:1px solid var(--line);
+    background:#fff;border-radius:10px;padding:13px 14px;color:var(--ink);}
+  input:focus,select:focus{outline:2px solid var(--grs);outline-offset:1px;border-color:var(--grs);}
+  .btn{width:100%;background:var(--grs);color:#fff;border:none;padding:16px;border-radius:12px;
+    font-size:17px;font-weight:800;cursor:pointer;font-family:inherit;margin-top:22px;}
+  .btn:disabled{opacity:.6;}
+  .btn.out{background:#fff;color:var(--ink);border:1.5px solid var(--line);font-weight:700;}
+  .note{font-size:12px;color:var(--muted);text-align:center;margin-top:14px;line-height:1.5;}
+  .state{display:none;text-align:center;padding:34px 10px 10px;}
+  .state .big{font-size:52px;line-height:1;}
+  .state h2{font-size:19px;margin:14px 0 6px;}
+  .state p{font-size:14px;color:var(--muted);margin:0 0 8px;line-height:1.55;}
+  .state .meta{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--ok);}
+  .err{display:none;background:var(--badbg);color:var(--bad);border-radius:10px;
+    padding:12px 14px;font-size:13.5px;font-weight:600;margin-top:16px;line-height:1.45;}
+  .spin{display:inline-block;width:18px;height:18px;border:2.5px solid rgba(255,255,255,.4);
+    border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;vertical-align:-4px;margin-right:8px;}
+  @keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <div class="t">Site Sign-in</div>
+    <div class="s">GRS Contractors · safety attendance</div>
+  </div>
+
+  <div class="site" id="siteBox" style="display:none">
+    <div class="r" id="siteRef"></div>
+    <div class="n" id="siteName"></div>
+  </div>
+
+  <div id="form" style="display:none">
+    <label for="f_name">Your name</label>
+    <input id="f_name" placeholder="Full name" autocomplete="name">
+    <label for="f_company">Company</label>
+    <input id="f_company" placeholder="GRS Contractors or your firm">
+    <label for="f_type">You are</label>
+    <select id="f_type">
+      <option value="staff">GRS staff</option>
+      <option value="subbie">Subcontractor</option>
+      <option value="visitor">Visitor</option>
+    </select>
+
+    <label>Your photo</label>
+    <input type="file" id="f_photo" accept="image/*" capture="user" style="display:none" onchange="photoPicked(this)">
+    <div id="photoZone" onclick="document.getElementById('f_photo').click()"
+      style="border:1.5px dashed #c8b8b3;border-radius:12px;padding:16px;text-align:center;cursor:pointer;background:#fff;">
+      <div id="photoPrompt" style="font-size:14px;font-weight:700;color:var(--grs)">📷 Take your photo</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:3px">Required — confirms it's you signing in</div>
+      <img id="photoPreview" style="display:none;max-width:120px;border-radius:10px;margin-top:10px" alt="">
+    </div>
+
+    <button class="btn" id="btnIn" onclick="signIn()">Sign in to site</button>
+    <div class="err" id="err"></div>
+    <div class="note">Signing in records your location once, to confirm you're at the site. Nothing is tracked afterwards.</div>
+  </div>
+
+  <div id="kioskBar" style="display:none;text-align:center;margin-top:14px">
+    <a href="javascript:kioskSignOutList()" style="font-size:14px;font-weight:700;color:var(--grs)">Signing out? Tap here</a>
+  </div>
+
+  <div class="state" id="kioskOut">
+    <h2>Sign out</h2>
+    <p>Tap your name.</p>
+    <div id="kioskList"></div>
+    <div class="err" id="errK"></div>
+    <p style="margin-top:18px"><a href="javascript:kioskBackToSignIn()" style="font-weight:700;color:var(--grs)">← Back to sign in</a></p>
+  </div>
+
+  <div class="state" id="stIn">
+    <div class="big">✅</div>
+    <h2 id="inTitle">You're signed in</h2>
+    <p id="inMeta"></p>
+    <button class="btn out" onclick="signOut()">Sign out of site</button>
+    <div class="err" id="errOut"></div>
+  </div>
+
+  <div class="state" id="stBad">
+    <div class="big">⚠️</div>
+    <h2>Link not recognised</h2>
+    <p>This sign-in link isn't valid. Check with your site manager for the current link or QR code.</p>
+  </div>
+</div>
+
+<script>
+const el = id => document.getElementById(id);
+const qs = new URLSearchParams(location.search);
+const T = qs.get('t') || '';
+const K = qs.get('k') || '';
+const KIOSK = !!K;
+const LS = 'grs_signin_' + T;
+const tok = () => KIOSK ? {k:K} : {t:T};
+const tokQ = () => KIOSK ? ('k='+encodeURIComponent(K)) : ('t='+encodeURIComponent(T));
+
+function getPos(timeoutMs=10000){
+  return new Promise(resolve=>{
+    if(!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(
+      p=>resolve({lat:p.coords.latitude,lng:p.coords.longitude,acc:Math.round(p.coords.accuracy)}),
+      ()=>resolve(null),
+      {enableHighAccuracy:true, timeout:timeoutMs, maximumAge:15000}
+    );
+  });
+}
+
+// Stable per-phone identity (one open sign-in per device per site)
+function deviceId(){
+  let d = localStorage.getItem('grs_device');
+  if(!d){ d = 'd' + Math.random().toString(36).slice(2,12) + Date.now().toString(36); localStorage.setItem('grs_device', d); }
+  return d;
+}
+
+// Downscale the camera image to a small JPEG (~40-60KB) before upload
+let PHOTO = null;
+function photoPicked(input){
+  const f = input.files && input.files[0];
+  if(!f) return;
+  const img = new Image();
+  img.onload = () => {
+    const MAX = 480;
+    const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.width * scale);
+    c.height = Math.round(img.height * scale);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    PHOTO = c.toDataURL('image/jpeg', 0.72);
+    input.value = '';   // allow the same/next photo to fire change again
+    URL.revokeObjectURL(img.src);
+    el('photoPreview').src = PHOTO;
+    el('photoPreview').style.display = 'inline-block';
+    el('photoPrompt').textContent = '📷 Retake photo';
+  };
+  img.src = URL.createObjectURL(f);
+}
+async function api(path, body){
+  const r = await fetch('/api/public'+path, {
+    method: body ? 'POST':'GET',
+    headers:{'Content-Type':'application/json'},
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const data = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(data.error || 'Something went wrong');
+  return data;
+}
+function showErr(id,msg){ const e=el(id); e.textContent=msg; e.style.display='block'; }
+function hideErr(){ el('err').style.display='none'; el('errOut').style.display='none'; }
+
+async function boot(){
+  if(!T && !K){ el('stBad').style.display='block'; return; }
+  try{
+    const site = await api('/site?'+tokQ());
+    el('siteRef').textContent = site.ref + (KIOSK ? ' · SITE TABLET' : '');
+    el('siteName').textContent = site.name;
+    el('siteBox').style.display='block';
+    if(KIOSK){
+      el('form').style.display='block';
+      el('kioskBar').style.display='block';
+      return;
+    }
+    const saved = JSON.parse(localStorage.getItem(LS) || 'null');
+    if(saved && saved.id){
+      el('inTitle').textContent = saved.name + " — you're signed in";
+      el('inMeta').textContent = 'Signed in at ' + saved.at;
+      el('stIn').style.display='block';
+    } else {
+      const me = JSON.parse(localStorage.getItem('grs_me') || 'null');
+      if(me){ el('f_name').value = me.name||''; el('f_company').value = me.company||''; el('f_type').value = me.type||'staff'; }
+      el('form').style.display='block';
+    }
+  }catch(e){ el('stBad').style.display='block'; }
+}
+
+function resetKioskForm(){
+  el('f_name').value=''; el('f_company').value=''; el('f_type').value='staff';
+  PHOTO=null; el('f_photo').value='';   // clear the file input or re-picking won't fire
+  el('photoPreview').style.display='none'; el('photoPrompt').textContent='📷 Take your photo';
+  el('stIn').style.display='none'; el('form').style.display='block';
+  hideErr();
+}
+
+async function kioskSignOutList(){
+  hideErr();
+  try{
+    const rows = await api('/on-site?'+tokQ());
+    const list = rows.length ? rows.map(r=>{
+      const at = new Date(r.in_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+      return `<button class="btn out" style="margin-top:10px" onclick="kioskSignOut(${r.id},this)">${r.name} <span style="font-weight:500;color:var(--muted)">· in ${at} · tap to sign out</span></button>`;
+    }).join('') : '<p style="text-align:center;color:var(--muted);font-size:14px;margin-top:16px">Nobody signed in.</p>';
+    el('kioskList').innerHTML = list;
+    el('form').style.display='none';
+    el('kioskOut').style.display='block';
+  }catch(e){ showErr('err', e.message); }
+}
+
+async function kioskSignOut(id, btn){
+  btn.disabled = true;
+  const pos = await getPos(4000);
+  try{
+    await api('/sign-out', { ...tok(), id, lat:pos?.lat, lng:pos?.lng });
+    btn.textContent = 'Signed out ✓';
+    setTimeout(kioskSignOutList, 700);
+  }catch(e){ btn.disabled=false; showErr('err', e.message); }
+}
+
+function kioskBackToSignIn(){
+  el('kioskOut').style.display='none';
+  resetKioskForm();
+}
+
+async function signIn(){
+  hideErr();
+  const name = el('f_name').value.trim();
+  if(!name){ showErr('err','Enter your name'); return; }
+  if(!PHOTO){ showErr('err','Take your photo first — it confirms it\'s you signing in'); return; }
+  const btn = el('btnIn');
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>Checking you\'re at site…';
+  const pos = await getPos();
+  if(!pos){
+    btn.disabled=false; btn.textContent='Sign in to site';
+    showErr('err','Location is required to sign in with this link. Allow location access in your browser settings and try again.');
+    return;
+  }
+  try{
+    const r = await api('/sign-in', { ...tok(), name, company:el('f_company').value.trim(),
+      type:el('f_type').value, lat:pos.lat, lng:pos.lng, acc:pos.acc,
+      photo: PHOTO, device_id: deviceId() });
+    const at = new Date(r.in_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+    if(KIOSK){
+      // shared tablet: flash success, then a clean form for the next person
+      el('form').style.display='none';
+      el('inTitle').textContent = r.name + ' — signed in ✓';
+      el('inMeta').innerHTML = 'At <span class="meta">'+at+'</span> · next person, step up';
+      el('stIn').style.display='block';
+      document.querySelector('#stIn .btn.out').style.display='none';
+      setTimeout(resetKioskForm, 2500);
+      return;
+    }
+    localStorage.setItem(LS, JSON.stringify({ id:r.id, name:r.name, at }));
+    localStorage.setItem('grs_me', JSON.stringify({ name, company:el('f_company').value.trim(), type:el('f_type').value }));
+    el('form').style.display='none';
+    el('inTitle').textContent = r.name + " — you're signed in";
+    el('inMeta').innerHTML = 'Signed in at <span class="meta">'+at+'</span> · '+ (r.dist_m!=null ? r.dist_m+'m from site datum' : '');
+    el('stIn').style.display='block';
+  }catch(e){
+    showErr('err', e.message);
+  }finally{
+    btn.disabled=false; btn.textContent='Sign in to site';
+  }
+}
+
+async function signOut(){
+  hideErr();
+  const saved = JSON.parse(localStorage.getItem(LS) || 'null');
+  if(!saved){ location.reload(); return; }
+  const pos = await getPos(4000);
+  try{
+    await api('/sign-out', { ...tok(), id:saved.id, lat:pos?.lat, lng:pos?.lng });
+    localStorage.removeItem(LS);
+    el('stIn').style.display='none';
+    el('form').style.display='block';
+    el('inTitle').textContent = '';
+  }catch(e){
+    if(/already|No open/i.test(e.message)){ localStorage.removeItem(LS); location.reload(); return; }
+    showErr('errOut', e.message);
+  }
+}
+
+boot();
+</script>
+</body>
+</html>
