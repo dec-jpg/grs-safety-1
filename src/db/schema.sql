@@ -92,3 +92,36 @@ CREATE INDEX IF NOT EXISTS idx_attendance_site   ON attendance(site_id);
 CREATE INDEX IF NOT EXISTS idx_attendance_onsite ON attendance(site_id) WHERE out_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_attendance_day    ON attendance(in_at);
 
+-- ============================================================
+--  GPS capture (added after first deploy — safe to re-run)
+--  Sites carry their own coordinates; attendance stamps the
+--  signing device's position at the in/out moment only.
+-- ============================================================
+ALTER TABLE sites      ADD COLUMN IF NOT EXISTS lat     DOUBLE PRECISION;
+ALTER TABLE sites      ADD COLUMN IF NOT EXISTS lng     DOUBLE PRECISION;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS in_lat  DOUBLE PRECISION;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS in_lng  DOUBLE PRECISION;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS in_acc  REAL;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS out_lat DOUBLE PRECISION;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS out_lng DOUBLE PRECISION;
+
+-- Per-site token for the public operative sign-in link (unguessable).
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS signin_token TEXT;
+UPDATE sites SET signin_token = substr(md5(random()::text || id::text), 1, 10)
+  WHERE signin_token IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_token ON sites(signin_token);
+
+-- Separate kiosk token: shared site tablet. Device rule off, form resets
+-- per person, photo still required. Keep this link off personal phones.
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS kiosk_token TEXT;
+UPDATE sites SET kiosk_token = substr(md5(random()::text || 'k' || id::text), 1, 10)
+  WHERE kiosk_token IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_kiosk ON sites(kiosk_token);
+
+-- Self sign-in identity layers: photo at the gate + one open sign-in per device.
+-- Photo is a small compressed JPEG (server-capped). Fine at crew scale in
+-- Postgres; migrates to object storage (R2) when rollout multiplies volume.
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS photo     TEXT;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS device_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_attendance_device ON attendance(device_id) WHERE out_at IS NULL;
+
