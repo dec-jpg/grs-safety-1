@@ -140,13 +140,80 @@ function locPill(a){
                 : `<span class="pill warn">📍 ${label} from site</span>`;
 }
 
+
+// Monday of the current week, YYYY-MM-DD
+function weekStart(){
+  const d = new Date();
+  const day = (d.getDay()+6)%7;   // Mon=0
+  d.setDate(d.getDate()-day);
+  return d.toISOString().slice(0,10);
+}
+
+const REFUSAL_REASONS = {
+  too_far:   { label: 'Too far from site', cls: 'bad' },
+  no_gps:    { label: 'Location refused/off', cls: 'warn' },
+  no_photo:  { label: 'No photo', cls: 'warn' },
+  device_open:{ label: 'Phone already in use', cls: 'warn' },
+  already_in:{ label: 'Already signed in', cls: 'na' },
+  no_location:{ label: 'Site had no datum', cls: 'na' }
+};
+function refusalsTable(rows){
+  if(!rows.length) return '<div class="loading">No refused attempts — everyone who tried was at site.</div>';
+  return `<table>
+    <thead><tr><th>When</th><th>Name given</th><th>Reason</th><th class="num">Distance</th></tr></thead>
+    <tbody>${rows.map(r=>{
+      const rr = REFUSAL_REASONS[r.reason] || { label: r.reason, cls: 'na' };
+      const d = new Date(r.created_at);
+      const dist = r.dist_m==null ? '—' : r.dist_m>=1000 ? (r.dist_m/1000).toFixed(1)+'km' : r.dist_m+'m';
+      return `<tr>
+        <td style="font-family:var(--mono);font-size:12px">${d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})} ${d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</td>
+        <td><div class="site-name" style="font-size:13.5px">${esc(r.name||'(no name)')}</div>
+          <div class="site-meta">${esc(r.company||'')}${ATT_SITE?'':((r.company?' · ':'')+(r.site_ref||''))}</div></td>
+        <td><span class="pill ${rr.cls==='na'?'':rr.cls}" style="${rr.cls==='na'?'background:var(--paper);color:var(--muted)':''}">${rr.label}</span></td>
+        <td class="num" style="font-family:var(--mono);font-size:12.5px;color:${r.reason==='too_far'?'var(--bad)':'var(--muted)'}">${dist}</td>
+      </tr>`;
+    }).join('')}</tbody></table>
+  <p class="cap" style="margin:12px 0 0">Every refused link/kiosk sign-in is recorded with reason and distance. Repeated "too far" attempts by the same name tell their own story.</p>`;
+}
+
+const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+function weekTable(rows){
+  if(!rows.length) return '<div class="loading">No attendance in this week.</div>';
+  const start = new Date((el('wk_start')?el('wk_start').value:weekStart())+'T00:00:00');
+  const people = {};
+  let anyOpen = false;
+  rows.forEach(r=>{
+    const key = r.name + '||' + (r.company||'');
+    people[key] = people[key] || { name:r.name, company:r.company, days:[0,0,0,0,0,0,0], open:false };
+    const idx = Math.floor((new Date(r.in_at) - start) / 86400000);
+    if(idx>=0 && idx<7){
+      if(r.hours != null) people[key].days[idx] += r.hours;
+      else { people[key].open = true; anyOpen = true; }
+    }
+  });
+  const body = Object.values(people).sort((a,b)=>a.name.localeCompare(b.name)).map(p=>{
+    const total = p.days.reduce((a,b)=>a+b,0);
+    return `<tr><td><div class="site-name">${esc(p.name)}${p.open?' <span class="pill bad" style="font-size:9px;padding:2px 7px">Not signed out</span>':''}</div>
+      <div class="site-meta">${esc(p.company||'')}</div></td>
+      ${p.days.map(h=>`<td class="num" style="font-family:var(--mono);font-size:12.5px;color:${h?'var(--ink)':'var(--faint)'}">${h?h.toFixed(2):'·'}</td>`).join('')}
+      <td class="num" style="font-family:var(--mono);font-weight:700">${total.toFixed(2)}</td></tr>`;
+  }).join('');
+  return `<div style="overflow-x:auto"><table>
+    <thead><tr><th>Person</th>${DAYS.map(d=>`<th class="num">${d}</th>`).join('')}<th class="num">Total hrs</th></tr></thead>
+    <tbody>${body}</tbody></table></div>
+    ${anyOpen?'<p class="cap" style="margin:12px 0 0">Rows marked "Not signed out" have an open sign-in — those hours are missing until they\'re signed out.</p>':''}`;
+}
+
 async function vAttendance(){
   if(!STATE.sites.length) STATE.sites = await api('/sites');
   const q = ATT_SITE ? ('?site_id='+ATT_SITE) : '';
-  const [sum, on, today] = await Promise.all([
+  const wkS = el('wk_start') ? el('wk_start').value : weekStart();
+  const [sum, on, today, week, refusals] = await Promise.all([
     api('/attendance/summary'+q),
     api('/attendance/on-site'+q),
-    api('/attendance/today'+q)
+    api('/attendance/today'+q),
+    api('/attendance/week?start='+wkS+(ATT_SITE?('&site_id='+ATT_SITE):'')),
+    api('/attendance/refusals?days=7'+(ATT_SITE?('&site_id='+ATT_SITE):''))
   ]);
   const siteOpts = `<option value="0">All sites</option>` + STATE.sites.map(s=>
     `<option value="${s.id}" ${s.id===ATT_SITE?'selected':''}>${s.ref} — ${esc(s.name)}</option>`).join('');
@@ -185,7 +252,6 @@ async function vAttendance(){
       ${ATT_SITE?`<button class="btn-ghost" onclick="copySigninLink()">🔗 Copy sign-in link</button>
       <button class="btn-ghost" onclick="copyKioskLink()">📱 Copy tablet (kiosk) link</button>
       <button class="btn-ghost" onclick="setSiteLocation()">📍 Set site location here</button>`:''}
-      <button class="btn-primary" onclick="attSignInModal()">+ Sign someone in</button>
     </div>
   </div>
   ${ATT_SITE && !STATE.sites.find(s=>s.id===ATT_SITE)?.lat ? `<p style="font-size:12px;color:var(--muted);margin:10px 0 0">No saved location for this site yet — sign-ins record GPS but can't show distance. Stand on site and tap "Set site location here" once.</p>`:''}
@@ -204,39 +270,26 @@ async function vAttendance(){
   <div class="sec"><div class="sec-head"><h2>On site now</h2><span class="rule"></span></div>
     <div class="card">${onHtml}</div></div>
   <div class="sec"><div class="sec-head"><h2>Today's log</h2><span class="rule"></span></div>
-    <div class="card">${todayHtml}</div></div>`;
+    <div class="card">${todayHtml}</div></div>
+  <div class="sec"><div class="sec-head"><h2>Weekly log · for billing</h2><span class="rule"></span></div>
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+        <label style="font-size:12px;font-weight:700">Week starting
+          <input type="date" id="wk_start" value="${wkS}" onchange="show('attendance')"
+            style="font-family:inherit;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-left:8px">
+        </label>
+        <a class="btn-ghost" style="text-decoration:none" href="/api/attendance/week?start=${wkS}&${ATT_SITE?('site_id='+ATT_SITE+'&'):''}format=csv">⬇ Download CSV</a>
+      </div>
+      <div id="wk_table">${weekTable(week)}</div>
+    </div>
+  </div>
+  <div class="sec"><div class="sec-head"><h2>Refused attempts · last 7 days</h2><span class="rule"></span></div>
+    <div class="card">${refusalsTable(refusals)}</div>
+  </div>`;
 }
 
-function attSignInModal(){
-  const opts = STATE.sites.map(s=>`<option value="${s.id}" ${s.id===(ATT_SITE||STATE.sites[0]?.id)?'selected':''}>${s.ref} — ${esc(s.name)}</option>`).join('');
-  openModal(`
-    <h3>Sign in to site</h3>
-    <label>Site</label><select id="si_site">${opts}</select>
-    <label>Name</label><input id="si_name" placeholder="Full name">
-    <label>Company</label><input id="si_company" placeholder="GRS Contractors or subcontractor">
-    <label>Role</label><input id="si_role" placeholder="e.g. Operative, 360 Driver, Visitor">
-    <label>Type</label>
-    <select id="si_type"><option value="staff">GRS staff</option><option value="subbie">Subcontractor</option><option value="visitor">Visitor</option></select>
-    <label style="display:flex;align-items:center;gap:9px;font-weight:500;cursor:pointer;margin-top:14px">
-      <input type="checkbox" id="si_ind" checked style="width:auto"> Site induction completed &amp; valid</label>
-    <div class="modal-act"><button class="btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn-primary" onclick="attDoSignIn()">Sign in</button></div>`);
-}
-
-async function attDoSignIn(){
-  const name = el('si_name').value.trim();
-  if(!name){ toast('Enter a name'); return; }
-  const pos = await getPos();   // null if denied/unavailable — sign-in proceeds regardless
-  try{
-    await api('/attendance/sign-in', { method:'POST', body:{
-      name, company: el('si_company').value.trim()||null, role: el('si_role').value.trim()||null,
-      site_id: Number(el('si_site').value), type: el('si_type').value, inducted: el('si_ind').checked,
-      lat: pos?.lat, lng: pos?.lng, acc: pos?.acc
-    }});
-    closeModal(); toast(pos ? `${name} signed in 📍` : `${name} signed in (no location)`);
-    await show('attendance'); refreshCounts();
-  }catch(e){ toast(e.message); }
-}
+// Portal sign-in removed by design — all sign-ins are self-service
+// via the personal or kiosk link: geofenced + photographed, no vouching.
 
 async function attSignOut(id, name){
   const pos = await getPos(3000);
