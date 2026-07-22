@@ -7,6 +7,7 @@ const router = Router();
 router.use(requireAuth);
 
 const TYPES = ['staff', 'subbie', 'visitor'];
+const GEOFENCE_M = 500;   // sign-ins must happen at site — enforced on every route
 
 // Haversine distance in metres between two lat/lng points
 function distM(lat1, lng1, lat2, lng2) {
@@ -61,26 +62,8 @@ router.get('/today', wrap(async (req, res) => {
   res.json(withDistance(rows));
 }));
 
-// Sign someone in (lat/lng/acc optional — GPS may be denied or absent)
-router.post('/sign-in', wrap(async (req, res) => {
-  const { name, company, role, site_id, type, inducted, operative_id, lat, lng, acc } = req.body || {};
-  if (!name || !site_id) return res.status(400).json({ error: 'name and site_id are required' });
-  const t = TYPES.includes(type) ? type : 'staff';
-
-  const already = await one(
-    `SELECT id FROM attendance WHERE name = $1 AND site_id = $2 AND out_at IS NULL`,
-    [name.trim(), site_id]
-  );
-  if (already) return res.status(409).json({ error: 'Already signed in on this site' });
-
-  const row = await one(`
-    INSERT INTO attendance (operative_id, name, company, role, site_id, type, inducted, created_by, in_lat, in_lng, in_acc)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-    [operative_id ?? null, name.trim(), company ?? null, role ?? null, site_id, t,
-     inducted === false ? false : true, req.user.id, num(lat), num(lng), num(acc)]
-  );
-  res.status(201).json(row);
-}));
+// Portal sign-in removed by design: all sign-ins are self-service
+// (personal link or kiosk) — geofenced, photographed, no vouching.
 
 // Sign someone out (coords optional)
 router.post('/:id/sign-out', wrap(async (req, res) => {
@@ -111,6 +94,59 @@ router.get('/summary', wrap(async (req, res) => {
     on_site: Number(s.on_site), staff: Number(s.staff),
     others: Number(s.others), not_inducted: Number(s.not_inducted)
   });
+}));
+
+// Weekly log — for billing. ?start=YYYY-MM-DD (any day; snapped to that date),
+// 7 days from start. &site_id= optional. &format=csv downloads.
+router.get('/week', wrap(async (req, res) => {
+  const start = /^\d{4}-\d{2}-\d{2}$/.test(req.query.start || '') ? req.query.start : null;
+  if (!start) return res.status(400).json({ error: 'start=YYYY-MM-DD required' });
+  const params = [start];
+  let clause = `WHERE a.in_at >= $1::date AND a.in_at < ($1::date + INTERVAL '7 days')`;
+  if (req.query.site_id) { params.push(req.query.site_id); clause += ` AND a.site_id = $${params.length}`; }
+  const { rows } = await query(`
+    SELECT a.name, a.company, a.type, a.in_at, a.out_at, s.ref AS site_ref
+    FROM attendance a JOIN sites s ON s.id = a.site_id
+    ${clause}
+    ORDER BY a.name, a.in_at
+  `, params);
+  const data = rows.map(r => {
+    const hours = r.out_at ? Math.round((new Date(r.out_at) - new Date(r.in_at)) / 36000) / 100 : null;
+    return { ...r, hours };
+  });
+  if (req.query.format === 'csv') {
+    const escCsv = v => v == null ? '' : /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v);
+    const lines = ['Site,Name,Company,Type,Date,In,Out,Hours,Status'];
+    for (const r of data) {
+      const d = new Date(r.in_at);
+      lines.push([r.site_ref, r.name, r.company || '', r.type,
+        d.toLocaleDateString('en-GB'),
+        d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+        r.out_at ? new Date(r.out_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '',
+        r.hours ?? '', r.out_at ? '' : 'NOT SIGNED OUT'
+      ].map(escCsv).join(','));
+    }
+    res.set('Content-Type', 'text/csv');
+    res.set('Content-Disposition', `attachment; filename="attendance-week-${start}.csv"`);
+    return res.send(lines.join('\n'));
+  }
+  res.json(data);
+}));
+
+// Refused attempts — last N days, optional site filter
+router.get('/refusals', wrap(async (req, res) => {
+  const days = Math.min(Math.max(parseInt(req.query.days) || 7, 1), 90);
+  const params = [days];
+  let clause = `WHERE r.created_at >= now() - ($1 || ' days')::interval`;
+  if (req.query.site_id) { params.push(req.query.site_id); clause += ` AND r.site_id = $${params.length}`; }
+  const { rows } = await query(`
+    SELECT r.*, s.ref AS site_ref
+    FROM refusals r LEFT JOIN sites s ON s.id = r.site_id
+    ${clause}
+    ORDER BY r.created_at DESC
+    LIMIT 200
+  `, params);
+  res.json(rows);
 }));
 
 // Sign-in photo for a record (auth-gated; <img> tags send the session cookie)
