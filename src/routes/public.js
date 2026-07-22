@@ -27,6 +27,16 @@ function distM(lat1, lng1, lat2, lng2) {
 }
 const num = v => (v === undefined || v === null || v === '' || isNaN(Number(v))) ? null : Number(v);
 
+// Record a refused attempt — never blocks the response, never throws
+function logRefusal(site, body, reason, dist) {
+  const num = v => (v === undefined || v === null || v === '' || isNaN(Number(v))) ? null : Number(v);
+  query(`INSERT INTO refusals (site_id, name, company, reason, dist_m, lat, lng, acc, device_id)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [site?.id ?? null, (body?.name||'').trim().slice(0,120) || null, (body?.company||'').trim().slice(0,120) || null,
+     reason, dist ?? null, num(body?.lat), num(body?.lng), num(body?.acc),
+     (body?.device_id||'').slice(0,64) || null]).catch(() => {});
+}
+
 async function siteByToken(t, k) {
   if (k && typeof k === 'string' && k.length <= 32) {
     const s = await one(`SELECT id, ref, name, lat, lng FROM sites WHERE kiosk_token = $1 AND active = true`, [k]);
@@ -51,20 +61,28 @@ router.post('/sign-in', wrap(async (req, res) => {
   if (!site) return res.status(404).json({ error: 'Link not recognised' });
   if (!name || !name.trim()) return res.status(400).json({ error: 'Enter your name' });
 
-  if (site.lat == null)
+  if (site.lat == null) {
+    logRefusal(site, req.body, 'no_location', null);
     return res.status(409).json({ error: 'This site has no saved location yet — ask the site manager to set it, or sign in at the cabin.' });
+  }
 
   const la = num(lat), ln = num(lng);
-  if (la === null || ln === null)
+  if (la === null || ln === null) {
+    logRefusal(site, req.body, 'no_gps', null);
     return res.status(403).json({ error: 'Location is required to sign in with this link. Allow location access and try again.' });
+  }
 
   const d = distM(la, ln, site.lat, site.lng);
-  if (d > GEOFENCE_M)
+  if (d > GEOFENCE_M) {
+    logRefusal(site, req.body, 'too_far', d);
     return res.status(403).json({ error: `You appear to be ${d >= 1000 ? (d/1000).toFixed(1)+'km' : d+'m'} from ${site.ref} — sign-in refused. Get to site and try again.` });
+  }
 
   // Photo is required on this route — it's the identity layer
-  if (!photo || typeof photo !== 'string' || !photo.startsWith('data:image/'))
+  if (!photo || typeof photo !== 'string' || !photo.startsWith('data:image/')) {
+    logRefusal(site, req.body, 'no_photo', d);
     return res.status(400).json({ error: 'A photo is required to sign in' });
+  }
   if (photo.length > 160_000)
     return res.status(400).json({ error: 'Photo too large — please retake' });
 
@@ -75,14 +93,20 @@ router.post('/sign-in', wrap(async (req, res) => {
       `SELECT name FROM attendance WHERE device_id = $1 AND site_id = $2 AND out_at IS NULL`,
       [device_id, site.id]
     );
-    if (dev) return res.status(409).json({ error: `This phone already has ${dev.name} signed in — everyone signs in on their own phone.` });
+    if (dev) {
+      logRefusal(site, req.body, 'device_open', d);
+      return res.status(409).json({ error: `This phone already has ${dev.name} signed in — everyone signs in on their own phone.` });
+    }
   }
 
   const already = await one(
     `SELECT id FROM attendance WHERE lower(name) = lower($1) AND site_id = $2 AND out_at IS NULL`,
     [name.trim(), site.id]
   );
-  if (already) return res.status(409).json({ error: 'You are already signed in on this site' });
+  if (already) {
+    logRefusal(site, req.body, 'already_in', d);
+    return res.status(409).json({ error: 'You are already signed in on this site' });
+  }
 
   const kind = ['staff','subbie','visitor'].includes(type) ? type : 'staff';
   const row = await one(`
