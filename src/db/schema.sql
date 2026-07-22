@@ -125,3 +125,23 @@ ALTER TABLE attendance ADD COLUMN IF NOT EXISTS photo     TEXT;
 ALTER TABLE attendance ADD COLUMN IF NOT EXISTS device_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_attendance_device ON attendance(device_id) WHERE out_at IS NULL;
 
+
+-- ============================================================
+--  Refused sign-in attempts — the evidence layer.
+--  Every rejection on the operative/kiosk link is recorded:
+--  who tried, where from, why refused. Safe to re-run.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS refusals (
+  id         SERIAL PRIMARY KEY,
+  site_id    INT REFERENCES sites(id),
+  name       TEXT,
+  company    TEXT,
+  reason     TEXT NOT NULL,   -- too_far | no_photo | device_open | already_in | no_location
+  dist_m     INT,
+  lat        DOUBLE PRECISION,
+  lng        DOUBLE PRECISION,
+  acc        REAL,
+  device_id  TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_refusals_site_time ON refusals(site_id, created_at DESC);
