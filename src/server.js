@@ -10,12 +10,12 @@ import findingsRoutes from './routes/findings.js';
 import auditsRoutes from './routes/audits.js';
 import attendanceRoutes from './routes/attendance.js';
 import publicRoutes from './routes/public.js';
+import operativesRoutes from './routes/operatives.js';
 
 dotenv.config();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
-app.set('trust proxy', 1);   // Railway sits behind a proxy
 app.use(express.json({ limit: '1mb' }));  // sign-in photos ride in JSON
 app.use(cookieParser());
 
@@ -26,6 +26,7 @@ app.use('/api/findings', findingsRoutes);
 app.use('/api/audits', auditsRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/public', publicRoutes);
+app.use('/api/operatives', operativesRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
