@@ -47,6 +47,48 @@ async function siteByToken(t, k) {
   return s ? { ...s, kiosk: false } : null;
 }
 
+async function findOperative(name){
+  if(!name) return null;
+  return one(`SELECT * FROM operatives WHERE lower(name) = lower($1) ORDER BY id LIMIT 1`, [name.trim()]);
+}
+async function findOrCreateOperative(name, company, role){
+  let op = await findOperative(name);
+  if(!op) op = await one(
+    `INSERT INTO operatives (name, company, role) VALUES ($1,$2,$3) RETURNING *`,
+    [name.trim(), (company||'').trim() || null, (role||'').trim() || null]);
+  return op;
+}
+async function inductionState(site, name){
+  const companyContent = (await one(`SELECT value FROM settings WHERE key='company_induction'`))?.value || null;
+  const siteContent = site.site_induction || null;
+  const op = await findOperative(name);
+  const companyDone = !companyContent || !!(op && op.company_inducted_at);
+  const siteDone = !siteContent || !!(op && await one(
+    `SELECT id FROM site_inductions WHERE operative_id = $1 AND site_id = $2`, [op ? op.id : -1, site.id]));
+  return { op, companyContent, siteContent, companyDone, siteDone };
+}
+
+// Record an induction signature (company or site) — read, confirmed, signed
+router.post('/induct', wrap(async (req, res) => {
+  const { t, k, name, company, role, which, signed_name } = req.body || {};
+  const site = await siteByToken(t, k);
+  if (!site) return res.status(404).json({ error: 'Link not recognised' });
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Name required' });
+  if (!signed_name || signed_name.trim().length < 3)
+    return res.status(400).json({ error: 'Type your full name to sign' });
+  const op = await findOrCreateOperative(name, company, role);
+  if (which === 'company') {
+    await query(`UPDATE operatives SET company_inducted_at = now(), company_induction_sig = $2,
+                 company = COALESCE(company, $3) WHERE id = $1`,
+      [op.id, signed_name.trim(), (company||'').trim() || null]);
+  } else if (which === 'site') {
+    await query(`INSERT INTO site_inductions (operative_id, site_id, signed_name)
+                 VALUES ($1,$2,$3) ON CONFLICT (operative_id, site_id) DO NOTHING`,
+      [op.id, site.id, signed_name.trim()]);
+  } else return res.status(400).json({ error: 'Unknown induction type' });
+  res.json({ ok: true });
+}));
+
 // Site info for the sign-in page (name shown to the operative)
 router.get('/site', wrap(async (req, res) => {
   const site = await siteByToken(req.query.t, req.query.k);
@@ -108,12 +150,29 @@ router.post('/sign-in', wrap(async (req, res) => {
     return res.status(409).json({ error: 'You are already signed in on this site' });
   }
 
+  // Induction gate: no valid induction, no sign-in. The page walks them
+  // through read -> confirm -> sign, then retries automatically.
+  const ind = await inductionState(site, name);
+  if (!ind.companyDone || !ind.siteDone) {
+    logRefusal(site, req.body, 'not_inducted', d);
+    return res.status(409).json({
+      error: 'Induction required before sign-in',
+      induction_required: {
+        company: !ind.companyDone, site: !ind.siteDone,
+        company_content: !ind.companyDone ? ind.companyContent : null,
+        site_content: !ind.siteDone ? ind.siteContent : null,
+        site_name: site.name
+      }
+    });
+  }
+
   const kind = ['staff','subbie','visitor'].includes(type) ? type : 'staff';
+  const op = await findOrCreateOperative(name, company, role);
   const row = await one(`
-    INSERT INTO attendance (name, company, role, site_id, type, inducted, in_lat, in_lng, in_acc, photo, device_id)
-    VALUES ($1,$2,$3,$4,$5,true,$6,$7,$8,$9,$10)
+    INSERT INTO attendance (operative_id, name, company, role, site_id, type, inducted, in_lat, in_lng, in_acc, photo, device_id)
+    VALUES ($1,$2,$3,$4,$5,$6,true,$7,$8,$9,$10,$11)
     RETURNING id, name, in_at`,
-    [name.trim(), (company||'').trim() || null, (role||'').trim() || null, site.id, kind, la, ln, num(acc),
+    [op.id, name.trim(), (company||'').trim() || null, (role||'').trim() || null, site.id, kind, la, ln, num(acc),
      photo, (device_id||'').slice(0,64) || null]
   );
   res.status(201).json({ id: row.id, name: row.name, in_at: row.in_at, site: site.ref, dist_m: d });
