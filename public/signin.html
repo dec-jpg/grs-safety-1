@@ -81,6 +81,19 @@
     <div class="note">Signing in records your location once, to confirm you're at the site. Nothing is tracked afterwards.</div>
   </div>
 
+  <div class="state" id="stInduct" style="text-align:left">
+    <h2 style="text-align:center" id="indTitle">Site induction</h2>
+    <p style="text-align:center" id="indIntro">Before you can sign in, read and sign the induction below.</p>
+    <div id="indContent" style="background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;
+      max-height:45vh;overflow-y:auto;font-size:14px;line-height:1.6;white-space:pre-wrap"></div>
+    <label style="display:flex;align-items:flex-start;gap:10px;font-size:13.5px;font-weight:600;margin:16px 0 4px;cursor:pointer">
+      <input type="checkbox" id="indConfirm" style="width:auto;margin-top:2px"> I confirm I have read and understood this induction and will comply with it</label>
+    <label for="indSig">Sign by typing your full name</label>
+    <input id="indSig" placeholder="Full name" autocomplete="off">
+    <button class="btn" id="btnInduct" onclick="submitInduction()">Sign &amp; continue</button>
+    <div class="err" id="errInd"></div>
+  </div>
+
   <div id="kioskBar" style="display:none;text-align:center;margin-top:14px">
     <a href="javascript:kioskSignOutList()" style="font-size:14px;font-weight:700;color:var(--grs)">Signing out? Tap here</a>
   </div>
@@ -165,7 +178,11 @@ async function api(path, body){
     body: body ? JSON.stringify(body) : undefined
   });
   const data = await r.json().catch(()=>({}));
-  if(!r.ok) throw new Error(data.error || 'Something went wrong');
+  if(!r.ok){
+    const err = new Error(data.error || 'Something went wrong');
+    if(data.induction_required) err.induction_required = data.induction_required;
+    throw err;
+  }
   return data;
 }
 function showErr(id,msg){ const e=el(id); e.textContent=msg; e.style.display='block'; }
@@ -233,6 +250,38 @@ function kioskBackToSignIn(){
   resetKioskForm();
 }
 
+let INDUCT_QUEUE = [];   // [{which, content}]
+function startInductions(req){
+  INDUCT_QUEUE = [];
+  if(req.company) INDUCT_QUEUE.push({which:'company', content:req.company_content || 'Company induction', title:'Company induction'});
+  if(req.site) INDUCT_QUEUE.push({which:'site', content:req.site_content || 'Site induction', title:'Site induction — '+(req.site_name||'')});
+  el('form').style.display='none';
+  nextInduction();
+}
+function nextInduction(){
+  const cur = INDUCT_QUEUE[0];
+  if(!cur){ el('stInduct').style.display='none'; el('form').style.display='block'; signIn(); return; }
+  el('indTitle').textContent = cur.title;
+  el('indContent').textContent = cur.content;
+  el('indConfirm').checked = false; el('indSig').value = el('f_name').value.trim();
+  el('errInd').style.display='none';
+  el('stInduct').style.display='block';
+}
+async function submitInduction(){
+  const cur = INDUCT_QUEUE[0]; if(!cur) return;
+  if(!el('indConfirm').checked){ showErr('errInd','Tick to confirm you have read and understood it'); return; }
+  const sig = el('indSig').value.trim();
+  if(sig.length < 3){ showErr('errInd','Type your full name to sign'); return; }
+  const btn = el('btnInduct'); btn.disabled = true;
+  try{
+    await api('/induct', { ...tok(), name: el('f_name').value.trim(), company: el('f_company').value.trim(),
+      which: cur.which, signed_name: sig });
+    INDUCT_QUEUE.shift();
+    nextInduction();
+  }catch(e){ showErr('errInd', e.message); }
+  finally{ btn.disabled = false; }
+}
+
 async function signIn(){
   hideErr();
   const name = el('f_name').value.trim();
@@ -268,7 +317,8 @@ async function signIn(){
     el('inMeta').innerHTML = 'Signed in at <span class="meta">'+at+'</span> · '+ (r.dist_m!=null ? r.dist_m+'m from site datum' : '');
     el('stIn').style.display='block';
   }catch(e){
-    showErr('err', e.message);
+    if(e.induction_required){ startInductions(e.induction_required); }
+    else showErr('err', e.message);
   }finally{
     btn.disabled=false; btn.textContent='Sign in to site';
   }
