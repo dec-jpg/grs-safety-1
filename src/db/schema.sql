@@ -145,3 +145,35 @@ CREATE TABLE IF NOT EXISTS refusals (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_refusals_site_time ON refusals(site_id, created_at DESC);
+
+-- ============================================================
+--  OPERATIVE SPINE + INDUCTIONS (safe to re-run)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS operatives (
+  id                    SERIAL PRIMARY KEY,
+  name                  TEXT NOT NULL,
+  company               TEXT,
+  role                  TEXT,
+  card_type             TEXT,
+  card_no               TEXT,
+  card_expiry           DATE,
+  company_inducted_at   TIMESTAMPTZ,
+  company_induction_sig TEXT,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_operatives_name ON operatives(lower(name));
+
+CREATE TABLE IF NOT EXISTS site_inductions (
+  id           SERIAL PRIMARY KEY,
+  operative_id INT NOT NULL REFERENCES operatives(id),
+  site_id      INT NOT NULL REFERENCES sites(id),
+  signed_name  TEXT NOT NULL,
+  signed_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(operative_id, site_id)
+);
+
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS site_induction TEXT;
+CREATE TABLE IF NOT EXISTS settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT
+);
