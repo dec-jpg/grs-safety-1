@@ -48,11 +48,35 @@ function siteTableRows(sites){
 }
 
 async function vOverview(){
-  const sum = await api('/audits/summary');
-  STATE.summary = sum;
+  const [sum, sites] = await Promise.all([ api('/audits/summary'), api('/sites') ]);
+  STATE.summary = sum; STATE.sites = sites;
   const h = sum.headline, sev = h.severity, tot = (sev.critical+sev.major+sev.minor)||1;
   const w = n => (n/tot*100)+'%';
+  const board = sites.map(st=>{
+    const on = Number(st.on_site)||0, subs = Number(st.sub_companies)||0;
+    const comp = st.compliance!=null ? Number(st.compliance) : null;
+    const tone = comp==null ? 'na' : comp>=95?'ok':comp>=90?'warn':'bad';
+    return `<tr style="cursor:pointer" onclick="ATT_SITE=${st.id};show('attendance')" title="Open site attendance">
+      <td><div class="site-name">${esc(st.name)}</div>
+        <div class="site-meta">${esc(st.ref)}${st.last_audited?' · audited '+new Date(st.last_audited).toLocaleDateString('en-GB',{day:'2-digit',month:'short'}):''}${st.lat==null?' · <b style="color:var(--bad)">no location set</b>':''}</div></td>
+      <td class="num"><span style="font-family:var(--mono);font-weight:800;font-size:16px;color:${on?'var(--grs)':'var(--faint)'}">${on}</span></td>
+      <td class="num" style="font-family:var(--mono);font-size:13px">${subs||'·'}</td>
+      <td>${comp==null?'<span class="pill" style="background:var(--paper);color:var(--muted)">Not audited</span>'
+        :`<div class="miniline" style="width:80px;display:inline-block;vertical-align:middle;margin-right:8px"><span style="width:${comp}%;background:${tone==='ok'?'var(--ok)':tone==='warn'?'var(--warn)':'var(--bad)'}"></span></div><span style="font-family:var(--mono);font-size:12px;font-weight:700">${comp}%</span>`}</td>
+      <td class="num" style="font-family:var(--mono)">${st.open_findings}</td>
+    </tr>`;
+  }).join('');
   return `
+  <div class="sec"><div class="sec-head" style="align-items:center">
+      <h2>Sites</h2>
+      <span class="live-chip"><span class="live-dot"></span>LIVE · who's on site right now</span>
+      <span class="rule"></span>
+      <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">as of ${new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</span>
+    </div>
+    <div class="card"><table>
+      <thead><tr><th>Site</th><th class="num" style="color:var(--grs)">● On site now</th><th class="num">Subbie firms</th><th>Compliance</th><th class="num">Open findings</th></tr></thead>
+      <tbody>${board}</tbody></table>
+      <p class="cap" style="margin:12px 0 0">Live from geofenced sign-ins — tap a site to open its register, links and weekly log.</p></div></div>
   <div class="sec"><div class="grid g4">
     <div class="stat accent"><div class="k">Compliance</div><div class="v">${h.compliance}<span class="u">%</span></div>
       <div class="miniline"><span style="width:${h.compliance}%;background:var(--grs)"></span></div>
@@ -68,11 +92,7 @@ async function vOverview(){
     <div class="stat"><div class="k">Overdue actions</div>
       <div class="v" style="color:${h.overdueFindings?'var(--grs)':'var(--ink)'}">${h.overdueFindings}</div>
       <div class="foot">${h.overdueFindings?'Require escalation':'Nothing overdue'}</div></div>
-  </div></div>
-  <div class="sec"><div class="sec-head"><h2>Site compliance</h2><span class="rule"></span></div>
-    <div class="card"><table>
-      <thead><tr><th>Site</th><th class="num">Audited</th><th>Compliance</th><th class="num">Open</th><th class="num">Status</th></tr></thead>
-      <tbody>${siteTableRows(sum.sites)}</tbody></table></div></div>`;
+  </div></div>`;
 }
 
 async function vAudits(){
@@ -249,7 +269,8 @@ async function vAttendance(){
     <select id="att_site" style="font-family:inherit;font-size:14px;border:1px solid var(--line);background:#fff;border-radius:9px;padding:10px 13px;color:var(--ink);font-weight:600;min-width:240px"
       onchange="ATT_SITE=Number(this.value);show('attendance')">${siteOpts}</select>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
-      ${ATT_SITE?`<button class="btn-ghost" onclick="copySigninLink()">🔗 Copy sign-in link</button>
+      ${ATT_SITE?`<button class="btn-ghost" onclick="siteInductionModal()">📖 Site induction</button>
+      <button class="btn-ghost" onclick="copySigninLink()">🔗 Copy sign-in link</button>
       <button class="btn-ghost" onclick="copyKioskLink()">📱 Copy tablet (kiosk) link</button>
       <button class="btn-ghost" onclick="setSiteLocation()">📍 Set site location here</button>`:''}
     </div>
@@ -348,9 +369,110 @@ async function setSiteLocation(){
   }catch(e){ toast(e.message); }
 }
 
+
+// ============================================================
+//  PEOPLE — the operative spine, live
+// ============================================================
+const fmtDate2 = d => d ? new Date(d).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'2-digit'}) : '—';
+async function vOperatives(){
+  const ops = await api('/operatives');
+  STATE.operatives = ops;
+  const cardPill = o => {
+    if(!o.card_expiry) return o.card_type ? `<span class="pill" style="background:var(--paper);color:var(--muted)">${esc(o.card_type)}</span>` : '<span class="pill" style="background:var(--paper);color:var(--muted)">No card</span>';
+    const days = Math.round((new Date(o.card_expiry)-Date.now())/86400000);
+    const label = (o.card_type||'Card');
+    return days<0 ? `<span class="pill bad">${esc(label)} · expired</span>`
+      : days<=60 ? `<span class="pill warn">${esc(label)} · ${days}d</span>`
+      : `<span class="pill ok">${esc(label)}</span>`;
+  };
+  const rows = ops.map(o=>`<tr>
+    <td><div class="site-name">${esc(o.name)}</div><div class="site-meta">${esc(o.company||'—')}${o.role?' · '+esc(o.role):''}</div></td>
+    <td>${cardPill(o)}</td>
+    <td>${o.company_inducted_at?`<span class="pill ok">✓ ${fmtDate2(o.company_inducted_at)}</span>`:'<span class="pill warn">Not done</span>'}</td>
+    <td class="num" style="font-family:var(--mono)">${o.sites_inducted}</td>
+    <td class="num" style="font-family:var(--mono);font-size:12px;color:var(--muted)">${o.last_seen?fmtDate2(o.last_seen):'never'}</td>
+    <td class="num"><button class="btn-sm" onclick="opModal(${o.id})">Edit</button></td>
+  </tr>`).join('');
+  return `
+  <div class="sec"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <div class="grid g3" style="flex:1;min-width:400px">
+      <div class="stat accent"><div class="k">Operatives on record</div><div class="v">${ops.length}</div><div class="foot">One record per person, reused everywhere</div></div>
+      <div class="stat"><div class="k">Company inducted</div><div class="v">${ops.filter(o=>o.company_inducted_at).length}<span class="u">/${ops.length}</span></div><div class="foot">Done once, kept on record</div></div>
+      <div class="stat"><div class="k">Cards expiring</div><div class="v">${ops.filter(o=>o.card_expiry && (new Date(o.card_expiry)-Date.now())/86400000<=60).length}</div><div class="foot">Within 60 days</div></div>
+    </div>
+  </div></div>
+  <div class="sec"><div class="sec-head"><h2>Workforce record</h2><span class="rule"></span>
+      <button class="btn-ghost btn-sm" onclick="companyInductionModal()">📖 Company induction</button>
+      <button class="btn-primary" style="padding:7px 14px;font-size:12px" onclick="opModal()">+ Add operative</button></div>
+    <div class="card">${ops.length?`<table>
+      <thead><tr><th>Operative</th><th>Card</th><th>Company induction</th><th class="num">Sites inducted</th><th class="num">Last seen</th><th class="num"></th></tr></thead>
+      <tbody>${rows}</tbody></table>`:'<div class="loading">No operatives yet — records create themselves the first time someone signs in and completes their induction, or add them here.</div>'}
+    </div></div>`;
+}
+
+function opModal(id){
+  const o = id ? (STATE.operatives||[]).find(x=>x.id===id) : null;
+  openModal(`
+    <h3>${o?'Edit operative':'Add operative'}</h3>
+    <label>Name</label><input id="op_name" value="${o?esc(o.name):''}">
+    <label>Company</label><input id="op_company" value="${o?esc(o.company||''):''}" placeholder="GRS Contractors or subcontractor">
+    <label>Role</label><input id="op_role" value="${o?esc(o.role||''):''}" placeholder="e.g. Groundworker, 360 Driver">
+    <label>Card type</label><input id="op_ctype" value="${o?esc(o.card_type||''):''}" placeholder="e.g. CSCS Blue, CPCS">
+    <label>Card number</label><input id="op_cno" value="${o?esc(o.card_no||''):''}">
+    <label>Card expiry</label><input type="date" id="op_cexp" value="${o&&o.card_expiry?String(o.card_expiry).slice(0,10):''}">
+    <div class="modal-act"><button class="btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn-primary" onclick="opSave(${o?o.id:'null'})">Save</button></div>`);
+}
+async function opSave(id){
+  const body = { name: el('op_name').value.trim(), company: el('op_company').value.trim()||null,
+    role: el('op_role').value.trim()||null, card_type: el('op_ctype').value.trim()||null,
+    card_no: el('op_cno').value.trim()||null, card_expiry: el('op_cexp').value||null };
+  if(!body.name){ toast('Name required'); return; }
+  try{
+    if(id) await api('/operatives/'+id, { method:'PATCH', body });
+    else await api('/operatives', { method:'POST', body });
+    closeModal(); toast('Saved'); await show('operatives'); refreshCounts();
+  }catch(e){ toast(e.message); }
+}
+
+async function companyInductionModal(){
+  const cur = await api('/operatives/settings/company-induction');
+  openModal(`
+    <h3>Company induction</h3>
+    <p style="font-size:12.5px;color:var(--muted);margin:4px 0 10px">Every operative reads and signs this once, on their first sign-in anywhere. Leave empty to switch the company induction off.</p>
+    <textarea id="ci_text" rows="12" style="width:100%;font-family:inherit;font-size:13.5px;border:1px solid var(--line);border-radius:10px;padding:12px">${esc(cur.value||'')}</textarea>
+    <div class="modal-act"><button class="btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn-primary" onclick="saveCompanyInduction()">Save</button></div>`);
+}
+async function saveCompanyInduction(){
+  try{
+    await api('/operatives/settings/company-induction', { method:'PUT', body:{ value: el('ci_text').value } });
+    closeModal(); toast('Company induction saved — now required at first sign-in');
+  }catch(e){ toast(e.message); }
+}
+
+async function siteInductionModal(){
+  const site = STATE.sites.find(s=>s.id===ATT_SITE); if(!site) return;
+  openModal(`
+    <h3>Site induction — ${esc(site.ref)}</h3>
+    <p style="font-size:12.5px;color:var(--muted);margin:4px 0 10px">Everyone signing in to this site reads and signs this once. Leave empty to switch the site induction off.</p>
+    <textarea id="si_text" rows="12" style="width:100%;font-family:inherit;font-size:13.5px;border:1px solid var(--line);border-radius:10px;padding:12px">${esc(site.site_induction||'')}</textarea>
+    <div class="modal-act"><button class="btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn-primary" onclick="saveSiteInduction()">Save</button></div>`);
+}
+async function saveSiteInduction(){
+  const site = STATE.sites.find(s=>s.id===ATT_SITE); if(!site) return;
+  try{
+    await api('/sites/'+site.id, { method:'PATCH', body:{ site_induction: el('si_text').value } });
+    site.site_induction = el('si_text').value;
+    closeModal(); toast(site.ref+' induction saved — required at sign-in');
+  }catch(e){ toast(e.message); }
+}
+
 const VIEWS = {
   overview:{t:"Dashboard", c:"Safety overview · all active sites", r:vOverview},
   audits:{t:"Audits", c:"Findings, actions and compliance scores", r:vAudits},
+  operatives:{t:"People", c:"The workforce record · inductions & cards", r:vOperatives},
   attendance:{t:"Site attendance", c:"Who's on site · sign in & out", r:vAttendance},
   training:{t:"Training", c:"Competency matrix and certificate currency",
     r:()=>preview('Training &amp; Competency','Track tickets and certificate expiry across site crews.')},
@@ -428,6 +550,7 @@ async function confirmClose(id){
 }
 
 async function refreshCounts(){
+  try{ const ops = await api('/operatives'); const c=document.getElementById('ct-operatives'); if(c) c.textContent=ops.length; }catch{}
   try{
     const open = await api('/findings?status=open');
     el('ct-audits').textContent = open.length;
