@@ -105,7 +105,7 @@ router.get('/week', wrap(async (req, res) => {
   let clause = `WHERE a.in_at >= $1::date AND a.in_at < ($1::date + INTERVAL '7 days')`;
   if (req.query.site_id) { params.push(req.query.site_id); clause += ` AND a.site_id = $${params.length}`; }
   const { rows } = await query(`
-    SELECT a.name, a.company, a.type, a.in_at, a.out_at, s.ref AS site_ref
+    SELECT a.name, a.company, a.type, a.in_at, a.out_at, a.auto_closed, a.out_dist_m, s.ref AS site_ref
     FROM attendance a JOIN sites s ON s.id = a.site_id
     ${clause}
     ORDER BY a.name, a.in_at
@@ -117,13 +117,18 @@ router.get('/week', wrap(async (req, res) => {
   if (req.query.format === 'csv') {
     const escCsv = v => v == null ? '' : /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v);
     const lines = ['Site,Name,Company,Type,Date,In,Out,Hours,Status'];
+    const GEOFENCE = Number(process.env.GEOFENCE_M || 500);
     for (const r of data) {
       const d = new Date(r.in_at);
       lines.push([r.site_ref, r.name, r.company || '', r.type,
         d.toLocaleDateString('en-GB'),
         d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
         r.out_at ? new Date(r.out_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '',
-        r.hours ?? '', r.out_at ? '' : 'NOT SIGNED OUT'
+        r.hours ?? '',
+        !r.out_at ? 'NOT SIGNED OUT'
+          : r.auto_closed ? 'AUTO-CLOSED 8PM — hours unverified'
+          : (r.out_dist_m != null && r.out_dist_m > GEOFENCE) ? `REMOTE SIGN-OUT ${r.out_dist_m >= 1000 ? (r.out_dist_m/1000).toFixed(1)+'km' : r.out_dist_m+'m'} from site`
+          : ''
       ].map(escCsv).join(','));
     }
     res.set('Content-Type', 'text/csv');
@@ -151,13 +156,12 @@ router.get('/refusals', wrap(async (req, res) => {
 
 // Sign-in photo for a record (auth-gated; <img> tags send the session cookie)
 router.get('/:id/photo', wrap(async (req, res) => {
-  const row = await one(`SELECT photo FROM attendance WHERE id = $1`, [req.params.id]);
+  const col = req.query.out ? 'out_photo' : 'photo';
+  const row = await one(`SELECT ${col} AS photo FROM attendance WHERE id = $1`, [req.params.id]);
   if (!row || !row.photo) return res.status(404).json({ error: 'No photo' });
-  const m = row.photo.match(/^data:(image\/[a-z+]+);base64,(.+)$/);
-  if (!m) return res.status(404).json({ error: 'No photo' });
-  res.set('Content-Type', m[1]);
-  res.set('Cache-Control', 'private, max-age=3600');
-  res.send(Buffer.from(m[2], 'base64'));
+  const m2 = row.photo.match(/^data:(image\/\w+);base64,(.+)$/);
+  if (!m2) return res.status(404).json({ error: 'No photo' });
+  res.set('Content-Type', m2[1]).send(Buffer.from(m2[2], 'base64'));
 }));
 
 // Set a site's coordinates (so distance checks work)
