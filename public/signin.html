@@ -60,6 +60,8 @@
     <input id="f_name" placeholder="Full name" autocomplete="name">
     <label for="f_company">Company</label>
     <input id="f_company" placeholder="GRS Contractors or your firm">
+    <label for="f_note">Note <span style="font-weight:500;color:var(--muted)">(optional)</span></label>
+    <textarea id="f_note" rows="2" maxlength="500" placeholder="Anything the site team should know" style="width:100%;padding:12px;font-size:16px;border:1px solid #BDB6AB;border-radius:8px;font-family:inherit;resize:vertical"></textarea>
     <label for="f_type">You are</label>
     <select id="f_type">
       <option value="staff">GRS staff</option>
@@ -105,6 +107,8 @@
     <div class="big">✅</div>
     <h2 id="inTitle">You're signed in</h2>
     <p id="inMeta"></p>
+    <label for="f_note_out">Note <span style="font-weight:500;color:var(--muted)">(optional)</span></label>
+    <textarea id="f_note_out" rows="2" maxlength="500" placeholder="e.g. leaving early — returning after lunch" style="width:100%;padding:12px;font-size:16px;border:1px solid #BDB6AB;border-radius:8px;font-family:inherit;resize:vertical"></textarea>
     <button class="btn out" onclick="signOut()">📷 Sign out of site</button>
     <p class="note">Signing out takes a quick photo — proof you were on site at the end of the day.</p>
     <div class="err" id="errOut"></div>
@@ -234,7 +238,7 @@ async function boot(){
 }
 
 function resetKioskForm(){
-  el('f_name').value=''; el('f_company').value=''; el('f_type').value='staff';
+  el('f_name').value=''; el('f_company').value=''; el('f_type').value='staff'; el('f_note').value='';
   PHOTO=null; el('f_photo').value='';   // clear the file input or re-picking won't fire
   el('photoPreview').style.display='none'; el('photoPrompt').textContent='📷 Take your photo';
   el('stIn').style.display='none'; el('form').style.display='block';
@@ -372,7 +376,7 @@ async function signIn(){
   try{
     const r = await api('/sign-in', { ...tok(), name, company:el('f_company').value.trim(),
       type:el('f_type').value, lat:pos.lat, lng:pos.lng, acc:pos.acc,
-      photo: PHOTO, device_id: deviceId() });
+      photo: PHOTO, device_id: deviceId(), note: el('f_note').value.trim().slice(0,500) || null });
     const at = new Date(r.in_at).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
     if(KIOSK){
       // shared tablet: flash success, then a clean form for the next person
@@ -407,7 +411,7 @@ async function signOut(){
 async function doSignOut(saved, photo){
   const pos = await getPos(4000);
   try{
-    await api('/sign-out', { ...tok(), id:saved.id, lat:pos?.lat, lng:pos?.lng, photo });
+    await api('/sign-out', { ...tok(), id:saved.id, lat:pos?.lat, lng:pos?.lng, photo, note: el('f_note_out').value.trim().slice(0,500) || null });
     localStorage.removeItem(LS);
     el('stIn').style.display='none';
     el('form').style.display='block';
