@@ -68,19 +68,46 @@ async function inductionState(site, name){
   return { op, companyContent, siteContent, companyDone, siteDone };
 }
 
-// Record an induction signature (company or site) — read, confirmed, signed
+// Induction content: JSON {sections:[{h,body}], questions:[{q,options,correct}]}
+// or legacy plain text (one section, no questions).
+function parseInduction(raw){
+  if(!raw) return null;
+  try {
+    const j = JSON.parse(raw);
+    if (j && (Array.isArray(j.sections) || Array.isArray(j.questions)))
+      return { sections: j.sections || [], questions: j.questions || [] };
+  } catch {}
+  return { sections: [{ h: '', body: raw }], questions: [] };
+}
+
+// Record an induction — sections read, questions answered (verified here), signed
 router.post('/induct', wrap(async (req, res) => {
-  const { t, k, name, company, role, which, signed_name } = req.body || {};
+  const { t, k, name, company, role, which, signed_name, answers, nok_name, nok_phone } = req.body || {};
   const site = await siteByToken(t, k);
   if (!site) return res.status(404).json({ error: 'Link not recognised' });
   if (!name || !name.trim()) return res.status(400).json({ error: 'Name required' });
   if (!signed_name || signed_name.trim().length < 3)
     return res.status(400).json({ error: 'Type your full name to sign' });
+
+  // Server-side comprehension check — the quiz can't be skipped by calling the API directly
+  const raw = which === 'company'
+    ? (await one(`SELECT value FROM settings WHERE key='company_induction'`))?.value
+    : site.site_induction;
+  const content = parseInduction(raw);
+  if (content && content.questions.length) {
+    const a = Array.isArray(answers) ? answers : [];
+    const allRight = content.questions.every((q, i) => Number(a[i]) === Number(q.correct));
+    if (!allRight) return res.status(400).json({ error: 'One or more answers are wrong — read the induction again' });
+  }
+
   const op = await findOrCreateOperative(name, company, role);
   if (which === 'company') {
     await query(`UPDATE operatives SET company_inducted_at = now(), company_induction_sig = $2,
-                 company = COALESCE(company, $3) WHERE id = $1`,
-      [op.id, signed_name.trim(), (company||'').trim() || null]);
+                 company = COALESCE(company, $3),
+                 next_of_kin = COALESCE($4, next_of_kin), nok_phone = COALESCE($5, nok_phone)
+                 WHERE id = $1`,
+      [op.id, signed_name.trim(), (company||'').trim() || null,
+       (nok_name||'').trim() || null, (nok_phone||'').trim() || null]);
   } else if (which === 'site') {
     await query(`INSERT INTO site_inductions (operative_id, site_id, signed_name)
                  VALUES ($1,$2,$3) ON CONFLICT (operative_id, site_id) DO NOTHING`,
@@ -97,6 +124,30 @@ router.get('/site', wrap(async (req, res) => {
 }));
 
 // Self sign-in — geofenced + photo + one open sign-in per device
+
+// -- Sign-in email notification (launch feature) ----------------
+// Fires a POST to the GRS mailer Apps Script. Fire-and-forget:
+// if MAILER_URL isn't set or the call fails, sign-in is unaffected.
+function notifySignIn(site, row, dist) {
+  const url = process.env.MAILER_URL;
+  if (!url) return;
+  const when = new Date().toLocaleString('en-GB', { timeZone: 'Europe/London' });
+  fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify({
+      secret: process.env.MAILER_SECRET || '',
+      subject: `GRS sign-in: ${row.name} at ${site.ref}`,
+      body: `${row.name} has signed in.\n\n` +
+            `  Site:     ${site.ref} — ${site.name}\n` +
+            `  Company:  ${row.company || '-'}\n` +
+            `  Time:     ${when}\n` +
+            `  Distance: ${dist == null ? '-' : dist + 'm from datum'}\n\n` +
+            `GRS Safety — sign-in system`
+    })
+  }).catch(() => {});
+}
+
 router.post('/sign-in', wrap(async (req, res) => {
   const { t, k, name, company, role, type, lat, lng, acc, photo, device_id } = req.body || {};
   const site = await siteByToken(t, k);
@@ -159,9 +210,10 @@ router.post('/sign-in', wrap(async (req, res) => {
       error: 'Induction required before sign-in',
       induction_required: {
         company: !ind.companyDone, site: !ind.siteDone,
-        company_content: !ind.companyDone ? ind.companyContent : null,
-        site_content: !ind.siteDone ? ind.siteContent : null,
-        site_name: site.name
+        company_content: !ind.companyDone ? parseInduction(ind.companyContent) : null,
+        site_content: !ind.siteDone ? parseInduction(ind.siteContent) : null,
+        site_name: site.name,
+        ask_nok: !ind.companyDone
       }
     });
   }
@@ -175,22 +227,32 @@ router.post('/sign-in', wrap(async (req, res) => {
     [op.id, name.trim(), (company||'').trim() || null, (role||'').trim() || null, site.id, kind, la, ln, num(acc),
      photo, (device_id||'').slice(0,64) || null]
   );
+  notifySignIn(site, { ...row, company: (company||'').trim() || null }, d);
   res.status(201).json({ id: row.id, name: row.name, in_at: row.in_at, site: site.ref, dist_m: d });
 }));
 
 // Self sign-out — must match an open record on this site
 router.post('/sign-out', wrap(async (req, res) => {
-  const { t, k, id, lat, lng } = req.body || {};
+  const { t, k, id, lat, lng, photo } = req.body || {};
   const site = await siteByToken(t, k);
   if (!site) return res.status(404).json({ error: 'Link not recognised' });
+
+  // Photo is required on sign-out too — proof of presence at the end of the day
+  if (!photo || typeof photo !== 'string' || !photo.startsWith('data:image/'))
+    return res.status(400).json({ error: 'A photo is required to sign out — it proves you were on site' });
+  if (photo.length > 160_000)
+    return res.status(400).json({ error: 'Photo too large — please retake' });
+
+  const la = num(lat), ln = num(lng);
+  const od = (site.lat != null && la !== null && ln !== null) ? distM(la, ln, site.lat, site.lng) : null;
   const row = await one(
-    `UPDATE attendance SET out_at = now(), out_lat = $3, out_lng = $4
+    `UPDATE attendance SET out_at = now(), out_lat = $3, out_lng = $4, out_dist_m = $5, out_photo = $6
      WHERE id = $1 AND site_id = $2 AND out_at IS NULL
-     RETURNING id, out_at`,
-    [num(id), site.id, num(lat), num(lng)]
+     RETURNING id, out_at, out_dist_m`,
+    [num(id), site.id, la, ln, od, photo]
   );
   if (!row) return res.status(404).json({ error: 'No open sign-in found — you may already be signed out' });
-  res.json({ ok: true, out_at: row.out_at });
+  res.json({ ok: true, out_at: row.out_at, out_dist_m: row.out_dist_m });
 }));
 
 // Kiosk only: who's on site, for tap-to-sign-out at the tablet
@@ -201,6 +263,36 @@ router.get('/on-site', wrap(async (req, res) => {
     `SELECT id, name, in_at FROM attendance WHERE site_id = $1 AND out_at IS NULL ORDER BY name`,
     [site.id]);
   res.json(rows.map(r => ({ id: r.id, name: r.name, in_at: r.in_at })));
+}));
+
+// ---------- Toolbox talks by link (no login) ----------
+router.get('/talk', wrap(async (req, res) => {
+  const talk = await one(`SELECT id, title, content FROM tbt_talks WHERE token = $1 AND active = true`,
+    [String(req.query.tt || '')]);
+  if (!talk) return res.status(404).json({ error: 'Talk link not recognised' });
+  res.json({ id: talk.id, title: talk.title, content: parseInduction(talk.content) });
+}));
+
+router.post('/talk-sign', wrap(async (req, res) => {
+  const { tt, name, company, signed_name, answers } = req.body || {};
+  const talk = await one(`SELECT id, title, content FROM tbt_talks WHERE token = $1 AND active = true`,
+    [String(tt || '')]);
+  if (!talk) return res.status(404).json({ error: 'Talk link not recognised' });
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Name required' });
+  if (!signed_name || signed_name.trim().length < 3)
+    return res.status(400).json({ error: 'Type your full name to sign' });
+  const content = parseInduction(talk.content);
+  if (content && content.questions.length) {
+    const a = Array.isArray(answers) ? answers : [];
+    const allRight = content.questions.every((q, i) => Number(a[i]) === Number(q.correct));
+    if (!allRight) return res.status(400).json({ error: 'One or more answers are wrong — read the talk again' });
+  }
+  await query(`
+    INSERT INTO tbt_signatures (talk_id, name, company, signed_name)
+    VALUES ($1,$2,$3,$4)
+    ON CONFLICT (talk_id, lower(name)) DO UPDATE SET signed_name = EXCLUDED.signed_name, signed_at = now()`,
+    [talk.id, name.trim(), (company||'').trim() || null, signed_name.trim()]);
+  res.json({ ok: true, title: talk.title });
 }));
 
 export default router;
