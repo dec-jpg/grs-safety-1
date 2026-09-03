@@ -177,3 +177,10 @@ CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT
 );
+
+-- ============================================================
+--  GRS Safety — schema (sign-out photo slice)
+--  Run by scripts/migrate.js
+-- ============================================================
+
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS out_photo TEXT;
