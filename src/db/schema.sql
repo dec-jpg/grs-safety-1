@@ -184,3 +184,4 @@ CREATE TABLE IF NOT EXISTS settings (
 -- ============================================================
 
 ALTER TABLE attendance ADD COLUMN IF NOT EXISTS out_photo TEXT;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS auto_closed BOOLEAN NOT NULL DEFAULT false;
