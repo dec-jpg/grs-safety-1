@@ -149,7 +149,7 @@ function notifySignIn(site, row, dist) {
 }
 
 router.post('/sign-in', wrap(async (req, res) => {
-  const { t, k, name, company, role, type, lat, lng, acc, photo, device_id } = req.body || {};
+  const { t, k, name, company, role, type, lat, lng, acc, photo, device_id, note } = req.body || {};
   const site = await siteByToken(t, k);
   if (!site) return res.status(404).json({ error: 'Link not recognised' });
   if (!name || !name.trim()) return res.status(400).json({ error: 'Enter your name' });
@@ -221,11 +221,11 @@ router.post('/sign-in', wrap(async (req, res) => {
   const kind = ['staff','subbie','visitor'].includes(type) ? type : 'staff';
   const op = await findOrCreateOperative(name, company, role);
   const row = await one(`
-    INSERT INTO attendance (operative_id, name, company, role, site_id, type, inducted, in_lat, in_lng, in_acc, photo, device_id)
-    VALUES ($1,$2,$3,$4,$5,$6,true,$7,$8,$9,$10,$11)
+    INSERT INTO attendance (operative_id, name, company, role, site_id, type, inducted, in_lat, in_lng, in_acc, photo, device_id, note)
+    VALUES ($1,$2,$3,$4,$5,$6,true,$7,$8,$9,$10,$11,$12)
     RETURNING id, name, in_at`,
     [op.id, name.trim(), (company||'').trim() || null, (role||'').trim() || null, site.id, kind, la, ln, num(acc),
-     photo, (device_id||'').slice(0,64) || null]
+     photo, (device_id||'').slice(0,64) || null, (typeof note==='string' ? note.trim().slice(0,500) : '') || null]
   );
   notifySignIn(site, { ...row, company: (company||'').trim() || null }, d);
   res.status(201).json({ id: row.id, name: row.name, in_at: row.in_at, site: site.ref, dist_m: d });
@@ -233,7 +233,7 @@ router.post('/sign-in', wrap(async (req, res) => {
 
 // Self sign-out — must match an open record on this site
 router.post('/sign-out', wrap(async (req, res) => {
-  const { t, k, id, lat, lng, photo } = req.body || {};
+  const { t, k, id, lat, lng, photo, note } = req.body || {};
   const site = await siteByToken(t, k);
   if (!site) return res.status(404).json({ error: 'Link not recognised' });
 
@@ -246,10 +246,10 @@ router.post('/sign-out', wrap(async (req, res) => {
   const la = num(lat), ln = num(lng);
   const od = (site.lat != null && la !== null && ln !== null) ? distM(la, ln, site.lat, site.lng) : null;
   const row = await one(
-    `UPDATE attendance SET out_at = now(), out_lat = $3, out_lng = $4, out_dist_m = $5, out_photo = $6
+    `UPDATE attendance SET out_at = now(), out_lat = $3, out_lng = $4, out_dist_m = $5, out_photo = $6, out_note = $7
      WHERE id = $1 AND site_id = $2 AND out_at IS NULL
      RETURNING id, out_at, out_dist_m`,
-    [num(id), site.id, la, ln, od, photo]
+    [num(id), site.id, la, ln, od, photo, (typeof note==='string' ? note.trim().slice(0,500) : '') || null]
   );
   if (!row) return res.status(404).json({ error: 'No open sign-in found — you may already be signed out' });
   res.json({ ok: true, out_at: row.out_at, out_dist_m: row.out_dist_m });
