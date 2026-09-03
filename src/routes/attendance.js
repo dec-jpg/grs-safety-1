@@ -14,7 +14,9 @@ const TYPES = ['staff', 'subbie', 'visitor'];
   try {
     await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS auto_closed BOOLEAN NOT NULL DEFAULT false");
     await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS out_photo TEXT");
-    console.log('[attendance] columns verified: auto_closed, out_photo');
+    await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS note TEXT");
+    await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS out_note TEXT");
+    console.log('[attendance] columns verified: auto_closed, out_photo, note, out_note');
   } catch (e) {
     console.error('[attendance] column check FAILED:', e.message);
   }
@@ -118,7 +120,7 @@ router.get('/week', wrap(async (req, res) => {
   let clause = `WHERE a.in_at >= $1::date AND a.in_at < ($1::date + INTERVAL '7 days')`;
   if (req.query.site_id) { params.push(req.query.site_id); clause += ` AND a.site_id = $${params.length}`; }
   const { rows } = await query(`
-    SELECT a.name, a.company, a.type, a.in_at, a.out_at, a.auto_closed, a.out_dist_m, s.ref AS site_ref
+    SELECT a.name, a.company, a.type, a.in_at, a.out_at, a.auto_closed, a.out_dist_m, a.note, a.out_note, s.ref AS site_ref
     FROM attendance a JOIN sites s ON s.id = a.site_id
     ${clause}
     ORDER BY a.name, a.in_at
