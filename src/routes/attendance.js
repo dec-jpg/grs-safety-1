@@ -7,6 +7,19 @@ const router = Router();
 router.use(requireAuth);
 
 const TYPES = ['staff', 'subbie', 'visitor'];
+// -- Boot-time self-repair -----------------------------------
+// Ensures the columns this module queries exist, over the app's
+// own database connection. Idempotent: no-op after first boot.
+(async () => {
+  try {
+    await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS auto_closed BOOLEAN NOT NULL DEFAULT false");
+    await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS out_photo TEXT");
+    console.log('[attendance] columns verified: auto_closed, out_photo');
+  } catch (e) {
+    console.error('[attendance] column check FAILED:', e.message);
+  }
+})();
+
 const GEOFENCE_M = 500;   // sign-ins must happen at site — enforced on every route
 
 // Haversine distance in metres between two lat/lng points
