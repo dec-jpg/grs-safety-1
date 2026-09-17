@@ -185,3 +185,27 @@ CREATE TABLE IF NOT EXISTS settings (
 
 ALTER TABLE attendance ADD COLUMN IF NOT EXISTS out_photo TEXT;
 ALTER TABLE attendance ADD COLUMN IF NOT EXISTS auto_closed BOOLEAN NOT NULL DEFAULT false;
+
+-- ============================================================
+--  Sign-out photo, notes, distance, end-of-day report log.
+--  The app also applies all of these itself at boot
+--  (src/db/ensure.js), so migrate.js is optional for them.
+-- ============================================================
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS out_dist_m INTEGER;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS note TEXT;
+ALTER TABLE attendance ADD COLUMN IF NOT EXISTS out_note TEXT;
+ALTER TABLE operatives ADD COLUMN IF NOT EXISTS role TEXT;
+ALTER TABLE operatives ADD COLUMN IF NOT EXISTS company_inducted_at TIMESTAMPTZ;
+ALTER TABLE operatives ADD COLUMN IF NOT EXISTS company_induction_sig TEXT;
+ALTER TABLE operatives ADD COLUMN IF NOT EXISTS next_of_kin TEXT;
+ALTER TABLE operatives ADD COLUMN IF NOT EXISTS nok_phone TEXT;
+CREATE TABLE IF NOT EXISTS daily_reports (
+  id          SERIAL PRIMARY KEY,
+  report_date DATE NOT NULL,
+  sent_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  recipients  TEXT,
+  rows_count  INT,
+  ok          BOOLEAN NOT NULL DEFAULT true,
+  detail      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_daily_reports_date ON daily_reports(report_date);

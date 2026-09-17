@@ -10,6 +10,7 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { wrap } from '../util.js';
 import { query, one } from '../db/pool.js';
+import { sendMail, mailConfigured } from '../mailer.js';
 
 const router = Router();
 const GEOFENCE_M = 500;   // max distance from site to allow self sign-in
@@ -125,26 +126,22 @@ router.get('/site', wrap(async (req, res) => {
 
 // Self sign-in — geofenced + photo + one open sign-in per device
 
-// -- Sign-in email notification (launch feature) ----------------
-// Fires a POST to the GRS mailer Apps Script. Fire-and-forget:
-// if MAILER_URL isn't set or the call fails, sign-in is unaffected.
+// -- Per-sign-in email (optional). Off unless SIGNIN_NOTIFY_TO is set
+// to a comma-separated list. Fire-and-forget: never affects the sign-in.
 function notifySignIn(site, row, dist) {
-  const url = process.env.MAILER_URL;
-  if (!url) return;
+  const to = (process.env.SIGNIN_NOTIFY_TO || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (!to.length || !mailConfigured()) return;
   const when = new Date().toLocaleString('en-GB', { timeZone: 'Europe/London' });
-  fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({
-      secret: process.env.MAILER_SECRET || '',
-      subject: `GRS sign-in: ${row.name} at ${site.ref}`,
-      body: `${row.name} has signed in.\n\n` +
-            `  Site:     ${site.ref} — ${site.name}\n` +
-            `  Company:  ${row.company || '-'}\n` +
-            `  Time:     ${when}\n` +
-            `  Distance: ${dist == null ? '-' : dist + 'm from datum'}\n\n` +
-            `GRS Safety — sign-in system`
-    })
+  sendMail({
+    to,
+    subject: `GRS sign-in: ${row.name} at ${site.ref}`,
+    text: `${row.name} has signed in.\n\n` +
+          `  Site:     ${site.ref}, ${site.name}\n` +
+          `  Company:  ${row.company || '-'}\n` +
+          `  Time:     ${when}\n` +
+          `  Distance: ${dist == null ? '-' : dist + 'm from datum'}\n` +
+          (row.note ? `  Note:     ${row.note}\n` : '') +
+          `\nGRS Safety, sign-in system`
   }).catch(() => {});
 }
 
@@ -227,7 +224,7 @@ router.post('/sign-in', wrap(async (req, res) => {
     [op.id, name.trim(), (company||'').trim() || null, (role||'').trim() || null, site.id, kind, la, ln, num(acc),
      photo, (device_id||'').slice(0,64) || null, (typeof note==='string' ? note.trim().slice(0,500) : '') || null]
   );
-  notifySignIn(site, { ...row, company: (company||'').trim() || null }, d);
+  notifySignIn(site, { ...row, company: (company||'').trim() || null, note: (typeof note==='string' ? note.trim() : '') || null }, d);
   res.status(201).json({ id: row.id, name: row.name, in_at: row.in_at, site: site.ref, dist_m: d });
 }));
 
@@ -263,36 +260,6 @@ router.get('/on-site', wrap(async (req, res) => {
     `SELECT id, name, in_at FROM attendance WHERE site_id = $1 AND out_at IS NULL ORDER BY name`,
     [site.id]);
   res.json(rows.map(r => ({ id: r.id, name: r.name, in_at: r.in_at })));
-}));
-
-// ---------- Toolbox talks by link (no login) ----------
-router.get('/talk', wrap(async (req, res) => {
-  const talk = await one(`SELECT id, title, content FROM tbt_talks WHERE token = $1 AND active = true`,
-    [String(req.query.tt || '')]);
-  if (!talk) return res.status(404).json({ error: 'Talk link not recognised' });
-  res.json({ id: talk.id, title: talk.title, content: parseInduction(talk.content) });
-}));
-
-router.post('/talk-sign', wrap(async (req, res) => {
-  const { tt, name, company, signed_name, answers } = req.body || {};
-  const talk = await one(`SELECT id, title, content FROM tbt_talks WHERE token = $1 AND active = true`,
-    [String(tt || '')]);
-  if (!talk) return res.status(404).json({ error: 'Talk link not recognised' });
-  if (!name || !name.trim()) return res.status(400).json({ error: 'Name required' });
-  if (!signed_name || signed_name.trim().length < 3)
-    return res.status(400).json({ error: 'Type your full name to sign' });
-  const content = parseInduction(talk.content);
-  if (content && content.questions.length) {
-    const a = Array.isArray(answers) ? answers : [];
-    const allRight = content.questions.every((q, i) => Number(a[i]) === Number(q.correct));
-    if (!allRight) return res.status(400).json({ error: 'One or more answers are wrong — read the talk again' });
-  }
-  await query(`
-    INSERT INTO tbt_signatures (talk_id, name, company, signed_name)
-    VALUES ($1,$2,$3,$4)
-    ON CONFLICT (talk_id, lower(name)) DO UPDATE SET signed_name = EXCLUDED.signed_name, signed_at = now()`,
-    [talk.id, name.trim(), (company||'').trim() || null, signed_name.trim()]);
-  res.json({ ok: true, title: talk.title });
 }));
 
 export default router;

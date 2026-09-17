@@ -11,14 +11,14 @@ import auditsRoutes from './routes/audits.js';
 import attendanceRoutes from './routes/attendance.js';
 import publicRoutes from './routes/public.js';
 import operativesRoutes from './routes/operatives.js';
-import sitepackRoutes from './routes/sitepack.js';
-import tbtRoutes from './routes/tbt.js';
+import { ensureSchema } from './db/ensure.js';
+import { startDailyReportScheduler } from './report.js';
 
 dotenv.config();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
-app.use(express.json({ limit: '8mb' }));  // sign-in photos ride in JSON
+app.use(express.json({ limit: '8mb' }));  // sign-in and sign-out photos ride in JSON
 app.use(cookieParser());
 
 // API
@@ -29,41 +29,47 @@ app.use('/api/audits', auditsRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/operatives', operativesRoutes);
-app.use('/api/sitepack', sitepackRoutes);
-app.use('/api/tbt', tbtRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
 // Static front-end
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// SPA fallback — send index for any non-API route
+// SPA fallback: send index for any non-API route
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
-// Error handler
+// Error handler. Aborted uploads (phone lost signal mid-photo) are noise, not errors.
 app.use((err, req, res, next) => {
+  if (err && (err.type === 'request.aborted' || err.code === 'ECONNABORTED')) {
+    if (!res.headersSent) res.status(400).json({ error: 'Upload interrupted, please try again' });
+    return;
+  }
+  if (err && err.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Photo too large, please retake' });
+  }
   console.error(err);
-  res.status(500).json({ error: 'Server error' });
+  if (!res.headersSent) res.status(500).json({ error: 'Server error' });
 });
 
 const PORT = process.env.PORT || 3000;
 
-// -- Boot-time column check ----------------------------------
-// The app repairs its own database on startup: adds the columns
-// this build needs if they're missing. Idempotent — a no-op on
-// every boot after the first. Ends the "code deployed, column
-// didn't" failure class for these features.
-import('./db/pool.js').then(async ({ query }) => {
+// Repair the schema first (idempotent), then listen, then start the
+// end-of-day report clock. A schema failure is logged, never fatal:
+// the app still comes up so the health check and rollback stay sane.
+(async () => {
   try {
-    await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS auto_closed BOOLEAN NOT NULL DEFAULT false");
-    await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS out_photo TEXT");
-    console.log('[boot] attendance columns verified: auto_closed, out_photo');
+    await Promise.race([
+      ensureSchema(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('schema check timed out after 25s')), 25_000))
+    ]);
   } catch (e) {
-    console.error('[boot] column check FAILED:', e.message);
+    console.error('[boot] schema check did not complete:', e.message);
   }
-});
-
-app.listen(PORT, () => console.log(`GRS Safety running on :${PORT}`));
+  app.listen(PORT, () => {
+    console.log(`GRS Safety running on :${PORT}`);
+    try { startDailyReportScheduler(); } catch (e) { console.error('[boot] report scheduler failed to start:', e.message); }
+  });
+})();

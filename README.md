@@ -110,3 +110,27 @@ You need a local Postgres, or point `DATABASE_URL` at the Railway database.
 3. RAMS register mapped to work fronts.
 4. COSHH substance register.
 5. Site packs (per-site document bundles) — ties the above together.
+
+---
+
+## Sign-out photos, notes and the end-of-day report (Sep 2026)
+
+- **Photo on sign-out.** The operative link and the kiosk both take a photo when
+  someone signs out, the same way as sign-in. Both photos show in the portal's
+  Today's log (tap to view).
+- **Notes.** Optional note box on sign-in and on sign-out. Notes appear in the
+  portal, in the weekly CSV and in the end-of-day report.
+- **End-of-day report.** At `REPORT_TIME` (default 18:30 London) the portal emails
+  who signed in, who signed out and when, anyone still signed in, and anyone who
+  signed out away from site, per site. Days with no sign-ins are skipped. Each
+  send is logged in `daily_reports`, so a restart never sends it twice.
+  In the portal: Site attendance > **End-of-day report** to preview or send now.
+- **Email transport.** Deploy `tools/grs-mailer.gs` as an Apps Script web app and
+  set `MAILER_URL` + `MAILER_SECRET` on the Railway service (or set
+  `RESEND_API_KEY`). Until one is set, the report is still built and viewable
+  in the portal; it just cannot be emailed.
+- **Schema.** The app repairs its own database at boot (`src/db/ensure.js`):
+  every column and table this build needs is added with `IF NOT EXISTS` before
+  the server starts listening. No manual migration step after a deploy.
+- **Health check.** `railway.json` points Railway at `/api/health`, so a build
+  that fails to boot is never switched in over the working one.

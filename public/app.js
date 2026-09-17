@@ -246,7 +246,7 @@ async function vAttendance(){
         : `<div style="width:42px;height:42px;border-radius:9px;background:var(--paper);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--faint)">—</div>`}</td>
       <td><div class="site-name">${esc(a.name)} ${attTag(a.type)}</div>
         <div class="site-meta">${ATT_SITE?'':(a.site_ref+' · ')}in ${fmtTime(a.in_at)}</div></td>
-      <td style="font-size:12.5px;color:var(--muted)">${esc(a.company||'—')}<br>${esc(a.role||'')}</td>
+      <td style="font-size:12.5px;color:var(--muted)">${esc(a.company||'—')}<br>${esc(a.role||'')}${a.note?`<div style="margin-top:4px;color:var(--ink)">💬 ${esc(a.note)}</div>`:''}</td>
       <td class="num" style="font-family:var(--mono);font-size:12.5px">${fmtTime(a.in_at)}</td>
       <td>${locPill(a)}</td>
       <td>${a.inducted?'<span class="pill ok">Valid</span>':'<span class="pill bad">Not inducted</span>'}</td>
@@ -254,14 +254,23 @@ async function vAttendance(){
     </tr>`).join('')}</tbody></table>`
     : `<div class="loading">Nobody currently signed in${ATT_SITE?' on this site':''}.</div>`;
 
+  const thumb = (a, out) => `<img src="/api/attendance/${a.id}/photo${out?'?out=1':''}" alt="" title="${out?'Sign-out':'Sign-in'} photo" style="width:34px;height:34px;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid var(--line)" onclick="photoModal(${a.id},'${esc(a.name)}',${out?1:0})">`;
+  const outStatus = a => {
+    if(!a.out_at) return '<span class="pill ok" style="font-size:9px;padding:2px 7px">On site</span>';
+    if(a.out_dist_m!=null && a.out_dist_m>500) return `<span class="pill warn" style="font-size:9px;padding:2px 7px">Signed out ${a.out_dist_m>=1000?(a.out_dist_m/1000).toFixed(1)+'km':a.out_dist_m+'m'} from site</span>`;
+    return '';
+  };
   const todayHtml = today.length ? `<table>
-    <thead><tr><th>Name</th><th>Company</th><th class="num">In</th><th class="num">Out</th></tr></thead>
+    <thead><tr><th></th><th>Name</th><th>Company</th><th class="num">In</th><th class="num">Out</th><th>Status &amp; notes</th></tr></thead>
     <tbody>${today.map(a=>`<tr>
-      <td class="site-name">${esc(a.name)} ${attTag(a.type)}</td>
+      <td style="width:76px;white-space:nowrap">${a.has_photo?thumb(a,false):''}${a.has_out_photo?' '+thumb(a,true):''}</td>
+      <td class="site-name">${esc(a.name)} ${attTag(a.type)}${ATT_SITE?'':`<div class="site-meta">${esc(a.site_ref||'')}</div>`}</td>
       <td style="font-size:12.5px;color:var(--muted)">${esc(a.company||'—')}</td>
       <td class="num" style="font-family:var(--mono);font-size:12.5px">${fmtTime(a.in_at)}</td>
       <td class="num" style="font-family:var(--mono);font-size:12.5px;color:${a.out_at?'var(--ink)':'var(--ok)'}">${a.out_at?fmtTime(a.out_at):'on site'}</td>
-    </tr>`).join('')}</tbody></table>`
+      <td style="font-size:12px;color:var(--muted)">${outStatus(a)}${a.note?`<div style="margin-top:3px">💬 In: ${esc(a.note)}</div>`:''}${a.out_note?`<div style="margin-top:3px">💬 Out: ${esc(a.out_note)}</div>`:''}</td>
+    </tr>`).join('')}</tbody></table>
+    <p class="cap" style="margin:12px 0 0">Two photos per row means signed in and signed out: tap either to view. The end-of-day report emails this log automatically.</p>`
     : `<div class="loading">No attendance today${ATT_SITE?' on this site':''} yet.</div>`;
 
   return `
@@ -269,6 +278,7 @@ async function vAttendance(){
     <select id="att_site" style="font-family:inherit;font-size:14px;border:1px solid var(--line);background:#fff;border-radius:9px;padding:10px 13px;color:var(--ink);font-weight:600;min-width:240px"
       onchange="ATT_SITE=Number(this.value);show('attendance')">${siteOpts}</select>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn-ghost" onclick="reportModal()">📧 End-of-day report</button>
       ${ATT_SITE?`<button class="btn-ghost" onclick="siteInductionModal()">📖 Site induction</button>
       <button class="btn-ghost" onclick="copySigninLink()">🔗 Copy sign-in link</button>
       <button class="btn-ghost" onclick="copyKioskLink()">📱 Copy tablet (kiosk) link</button>
@@ -323,11 +333,40 @@ async function attSignOut(id, name){
 
 
 
-function photoModal(id, name){
+// ---------- End-of-day report ----------
+async function reportModal(){
+  let cfg;
+  try{ cfg = await api('/attendance/report-config'); }catch(e){ toast(e.message); return; }
+  const last = cfg.last_sent;
+  const lastTxt = last ? `${new Date(last.sent_at).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})} for ${new Date(last.report_date).toLocaleDateString('en-GB',{day:'2-digit',month:'short'})}${last.ok?'':' (failed: '+esc(last.detail||'')+')'}` : 'not yet';
   openModal(`
-    <h3>${name} — sign-in photo</h3>
-    <img src="/api/attendance/${id}/photo" style="width:100%;border-radius:12px;margin:6px 0 4px" alt="Sign-in photo">
-    <p style="font-size:12px;color:var(--muted);margin:8px 0 0">Taken at the moment of sign-in, with location and time.</p>
+    <h3>End-of-day report</h3>
+    <p style="font-size:13px;color:var(--muted);margin:4px 0 14px;line-height:1.55">Every day at <b>${esc(cfg.time)}</b> the portal emails who signed in, who signed out and when, and anyone still signed in, across all sites. Days with no sign-ins are skipped.</p>
+    <table style="font-size:13px"><tbody>
+      <tr><td style="color:var(--muted);padding:4px 12px 4px 0">Goes to</td><td>${cfg.recipients.map(esc).join('<br>')}</td></tr>
+      <tr><td style="color:var(--muted);padding:4px 12px 4px 0">Email</td><td>${cfg.mail_configured?`<span class="pill ok">Connected</span>`:`<span class="pill bad">Not set up on the server yet</span>`}</td></tr>
+      <tr><td style="color:var(--muted);padding:4px 12px 4px 0">Last sent</td><td>${lastTxt}</td></tr>
+    </tbody></table>
+    <div class="modal-act" style="justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <a class="btn-ghost" style="text-decoration:none" href="/api/attendance/daily-report?format=html" target="_blank" rel="noopener">👁 Preview today's report</a>
+      <div style="display:flex;gap:10px"><button class="btn-ghost" onclick="closeModal()">Close</button>
+      <button class="btn-primary" id="rp_send" onclick="sendReportNow()" ${cfg.mail_configured?'':'disabled'}>Send now</button></div>
+    </div>`);
+}
+async function sendReportNow(){
+  const b = el('rp_send'); if(b){ b.disabled = true; b.textContent = 'Sending…'; }
+  try{
+    const r = await api('/attendance/daily-report/send', { method:'POST', body:{} });
+    toast(`Report sent to ${r.recipients.length} recipient${r.recipients.length===1?'':'s'}`);
+    closeModal();
+  }catch(e){ toast(e.message); if(b){ b.disabled=false; b.textContent='Send now'; } }
+}
+
+function photoModal(id, name, out){
+  openModal(`
+    <h3>${name}: ${out?'sign-out':'sign-in'} photo</h3>
+    <img src="/api/attendance/${id}/photo${out?'?out=1':''}" style="width:100%;border-radius:12px;margin:6px 0 4px" alt="${out?'Sign-out':'Sign-in'} photo">
+    <p style="font-size:12px;color:var(--muted);margin:8px 0 0">Taken at the moment of ${out?'sign-out':'sign-in'}, with location and time.</p>
     <div class="modal-act"><button class="btn-ghost" onclick="closeModal()">Close</button></div>`);
 }
 

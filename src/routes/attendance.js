@@ -2,25 +2,12 @@ import { Router } from 'express';
 import { wrap } from '../util.js';
 import { query, one } from '../db/pool.js';
 import { requireAuth } from '../auth.js';
+import { buildDailyReport, renderReport, sendDailyReport, recipients, reportConfig, lastSent, londonDate } from '../report.js';
 
 const router = Router();
 router.use(requireAuth);
 
 const TYPES = ['staff', 'subbie', 'visitor'];
-// -- Boot-time self-repair -----------------------------------
-// Ensures the columns this module queries exist, over the app's
-// own database connection. Idempotent: no-op after first boot.
-(async () => {
-  try {
-    await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS auto_closed BOOLEAN NOT NULL DEFAULT false");
-    await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS out_photo TEXT");
-    await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS note TEXT");
-    await query("ALTER TABLE attendance ADD COLUMN IF NOT EXISTS out_note TEXT");
-    console.log('[attendance] columns verified: auto_closed, out_photo, note, out_note');
-  } catch (e) {
-    console.error('[attendance] column check FAILED:', e.message);
-  }
-})();
 
 const GEOFENCE_M = 500;   // sign-ins must happen at site — enforced on every route
 
@@ -38,11 +25,13 @@ const num = v => (v === undefined || v === null || v === '' || isNaN(Number(v)))
 
 function withDistance(rows) {
   return rows.map(r => {
-    const { photo, ...rest } = r;   // keep heavy photo data out of list payloads
+    const { photo, out_photo, ...rest } = r;   // keep heavy photo data out of list payloads
     return {
       ...rest,
       has_photo: !!photo,
-      in_dist_m: distM(r.in_lat, r.in_lng, r.site_lat, r.site_lng)
+      has_out_photo: !!out_photo,
+      in_dist_m: distM(r.in_lat, r.in_lng, r.site_lat, r.site_lng),
+      out_dist_m: r.out_dist_m ?? distM(r.out_lat, r.out_lng, r.site_lat, r.site_lng)
     };
   });
 }
@@ -131,19 +120,21 @@ router.get('/week', wrap(async (req, res) => {
   });
   if (req.query.format === 'csv') {
     const escCsv = v => v == null ? '' : /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v);
-    const lines = ['Site,Name,Company,Type,Date,In,Out,Hours,Status'];
+    const lines = ['Site,Name,Company,Type,Date,In,Out,Hours,Status,Note on sign-in,Note on sign-out'];
     const GEOFENCE = Number(process.env.GEOFENCE_M || 500);
     for (const r of data) {
       const d = new Date(r.in_at);
+      const TZ = { timeZone: 'Europe/London' };
       lines.push([r.site_ref, r.name, r.company || '', r.type,
-        d.toLocaleDateString('en-GB'),
-        d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-        r.out_at ? new Date(r.out_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '',
+        d.toLocaleDateString('en-GB', TZ),
+        d.toLocaleTimeString('en-GB', { ...TZ, hour: '2-digit', minute: '2-digit' }),
+        r.out_at ? new Date(r.out_at).toLocaleTimeString('en-GB', { ...TZ, hour: '2-digit', minute: '2-digit' }) : '',
         r.hours ?? '',
         !r.out_at ? 'NOT SIGNED OUT'
-          : r.auto_closed ? 'AUTO-CLOSED 8PM — hours unverified'
+          : r.auto_closed ? 'AUTO-CLOSED, hours unverified'
           : (r.out_dist_m != null && r.out_dist_m > GEOFENCE) ? `REMOTE SIGN-OUT ${r.out_dist_m >= 1000 ? (r.out_dist_m/1000).toFixed(1)+'km' : r.out_dist_m+'m'} from site`
-          : ''
+          : '',
+        r.note || '', r.out_note || ''
       ].map(escCsv).join(','));
     }
     res.set('Content-Type', 'text/csv');
@@ -167,6 +158,33 @@ router.get('/refusals', wrap(async (req, res) => {
     LIMIT 200
   `, params);
   res.json(rows);
+}));
+
+// ---------- End-of-day report ----------
+// Config + last send, for the portal header
+router.get('/report-config', wrap(async (req, res) => {
+  res.json({ ...reportConfig(), recipients: await recipients(), last_sent: await lastSent() });
+}));
+
+// The day's report as data (default) or as the HTML email (?format=html) for preview
+router.get('/daily-report', wrap(async (req, res) => {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : londonDate();
+  const report = await buildDailyReport(date);
+  if (req.query.format === 'html') {
+    const { html } = renderReport(report);
+    return res.set('Content-Type', 'text/html; charset=utf-8').send(html);
+  }
+  res.json(report);
+}));
+
+// Send now, to the configured recipients (or ?to= override for a test), even if the day is empty
+router.post('/daily-report/send', wrap(async (req, res) => {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body?.date || '') ? req.body.date : londonDate();
+  const to = (req.body?.to || '').split(',').map(s => s.trim()).filter(Boolean);
+  const r = await sendDailyReport(date, { force: true, trigger: `manual by ${req.user?.email || 'user'}`, to: to.length ? to : null });
+  if (r.skipped) return res.status(409).json({ error: r.skipped === 'mail not configured' ? 'Email is not configured on the server yet (MAILER_URL or RESEND_API_KEY)' : r.skipped, ...r });
+  if (!r.ok) return res.status(502).json({ error: r.error || 'Send failed', ...r });
+  res.json(r);
 }));
 
 // Sign-in photo for a record (auth-gated; <img> tags send the session cookie)
