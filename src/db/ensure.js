@@ -18,6 +18,7 @@ const STATEMENTS = [
   "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS note TEXT",
   "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS out_note TEXT",
   "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS auto_closed BOOLEAN NOT NULL DEFAULT false",
+  "ALTER TABLE attendance ADD COLUMN IF NOT EXISTS closed_by TEXT",   // portal user who signed the person out
 
   // -- operatives: fields the induction path writes
   "ALTER TABLE operatives ADD COLUMN IF NOT EXISTS role TEXT",
@@ -54,7 +55,16 @@ const STATEMENTS = [
      rows_count INT,
      ok BOOLEAN NOT NULL DEFAULT true,
      detail TEXT)`,
-  "CREATE INDEX IF NOT EXISTS idx_daily_reports_date ON daily_reports(report_date)"
+  "CREATE INDEX IF NOT EXISTS idx_daily_reports_date ON daily_reports(report_date)",
+
+  // -- one-time data repair, 17 Sep 2026: records closed from the portal after this
+  //    build went live (19:58 UTC) carried the manager's GPS and no closed_by, so they
+  //    showed as "signed out 55km from site". Every public sign-out since then has a
+  //    photo, so no-photo sign-outs after that moment can only be portal closes.
+  //    Safe to leave in: it only touches rows with closed_by still NULL.
+  `UPDATE attendance SET closed_by = 'a manager (portal)', out_lat = NULL, out_lng = NULL, out_dist_m = NULL
+     WHERE out_at IS NOT NULL AND out_photo IS NULL AND closed_by IS NULL
+       AND out_at >= '2026-09-17T19:58:00Z'`
 ];
 
 export async function ensureSchema() {

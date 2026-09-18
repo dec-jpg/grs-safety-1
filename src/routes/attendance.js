@@ -69,13 +69,15 @@ router.get('/today', wrap(async (req, res) => {
 // Portal sign-in removed by design: all sign-ins are self-service
 // (personal link or kiosk) — geofenced, photographed, no vouching.
 
-// Sign someone out (coords optional)
+// Sign someone out from the portal. This is a manager closing the record,
+// not the operative leaving site, so no location is stored (the manager's
+// phone position would show as a "remote sign-out") and closed_by says who did it.
 router.post('/:id/sign-out', wrap(async (req, res) => {
-  const { lat, lng } = req.body || {};
+  const who = (req.user?.name || req.user?.email || 'portal user').slice(0, 80);
   const row = await one(
-    `UPDATE attendance SET out_at = now(), out_lat = $2, out_lng = $3
+    `UPDATE attendance SET out_at = now(), out_lat = NULL, out_lng = NULL, out_dist_m = NULL, closed_by = $2
      WHERE id = $1 AND out_at IS NULL RETURNING *`,
-    [req.params.id, num(lat), num(lng)]
+    [req.params.id, who]
   );
   if (!row) return res.status(404).json({ error: 'Not found or already signed out' });
   res.json(row);
@@ -109,7 +111,7 @@ router.get('/week', wrap(async (req, res) => {
   let clause = `WHERE a.in_at >= $1::date AND a.in_at < ($1::date + INTERVAL '7 days')`;
   if (req.query.site_id) { params.push(req.query.site_id); clause += ` AND a.site_id = $${params.length}`; }
   const { rows } = await query(`
-    SELECT a.name, a.company, a.type, a.in_at, a.out_at, a.auto_closed, a.out_dist_m, a.note, a.out_note, s.ref AS site_ref
+    SELECT a.name, a.company, a.type, a.in_at, a.out_at, a.auto_closed, a.out_dist_m, a.note, a.out_note, a.closed_by, s.ref AS site_ref
     FROM attendance a JOIN sites s ON s.id = a.site_id
     ${clause}
     ORDER BY a.name, a.in_at
@@ -131,6 +133,7 @@ router.get('/week', wrap(async (req, res) => {
         r.out_at ? new Date(r.out_at).toLocaleTimeString('en-GB', { ...TZ, hour: '2-digit', minute: '2-digit' }) : '',
         r.hours ?? '',
         !r.out_at ? 'NOT SIGNED OUT'
+          : r.closed_by ? `SIGNED OUT FROM PORTAL by ${r.closed_by}`
           : r.auto_closed ? 'AUTO-CLOSED, hours unverified'
           : (r.out_dist_m != null && r.out_dist_m > GEOFENCE) ? `REMOTE SIGN-OUT ${r.out_dist_m >= 1000 ? (r.out_dist_m/1000).toFixed(1)+'km' : r.out_dist_m+'m'} from site`
           : '',
@@ -182,7 +185,7 @@ router.post('/daily-report/send', wrap(async (req, res) => {
   const date = /^\d{4}-\d{2}-\d{2}$/.test(req.body?.date || '') ? req.body.date : londonDate();
   const to = (req.body?.to || '').split(',').map(s => s.trim()).filter(Boolean);
   const r = await sendDailyReport(date, { force: true, trigger: `manual by ${req.user?.email || 'user'}`, to: to.length ? to : null });
-  if (r.skipped) return res.status(409).json({ error: r.skipped === 'mail not configured' ? 'Email is not configured on the server yet (MAILER_URL or RESEND_API_KEY)' : r.skipped, ...r });
+  if (r.skipped) return res.status(409).json({ error: r.skipped === 'mail not configured' ? 'Email is not configured on the server yet (SMTP_USER and SMTP_PASS, or MAILER_URL, or RESEND_API_KEY)' : r.skipped, ...r });
   if (!r.ok) return res.status(502).json({ error: r.error || 'Send failed', ...r });
   res.json(r);
 }));

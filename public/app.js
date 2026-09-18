@@ -257,6 +257,7 @@ async function vAttendance(){
   const thumb = (a, out) => `<img src="/api/attendance/${a.id}/photo${out?'?out=1':''}" alt="" title="${out?'Sign-out':'Sign-in'} photo" style="width:34px;height:34px;object-fit:cover;border-radius:8px;cursor:pointer;border:1px solid var(--line)" onclick="photoModal(${a.id},'${esc(a.name)}',${out?1:0})">`;
   const outStatus = a => {
     if(!a.out_at) return '<span class="pill ok" style="font-size:9px;padding:2px 7px">On site</span>';
+    if(a.closed_by) return `<span class="pill" style="font-size:9px;padding:2px 7px;background:var(--paper);color:var(--muted)">Signed out from portal by ${esc(a.closed_by)}</span>`;
     if(a.out_dist_m!=null && a.out_dist_m>500) return `<span class="pill warn" style="font-size:9px;padding:2px 7px">Signed out ${a.out_dist_m>=1000?(a.out_dist_m/1000).toFixed(1)+'km':a.out_dist_m+'m'} from site</span>`;
     return '';
   };

@@ -82,6 +82,9 @@
     <button class="btn" id="btnIn" onclick="signIn()">Sign in to site</button>
     <div class="err" id="err"></div>
     <div class="note">Signing in records your location once, to confirm you're at the site. Nothing is tracked afterwards.</div>
+    <div id="findOutBar" style="text-align:center;margin-top:16px">
+      <a href="#" onclick="findOpenSignIn();return false" style="font-size:14px;font-weight:700;color:var(--grs)">Already signed in? Sign out here</a>
+    </div>
   </div>
 
   <div class="state" id="stInduct" style="text-align:left">
@@ -92,7 +95,7 @@
   </div>
 
   <div id="kioskBar" style="display:none;text-align:center;margin-top:14px">
-    <a href="javascript:kioskSignOutList()" style="font-size:14px;font-weight:700;color:var(--grs)">Signing out? Tap here</a>
+    <a href="#" onclick="kioskSignOutList();return false" style="font-size:14px;font-weight:700;color:var(--grs)">Signing out? Tap here</a>
   </div>
 
   <div class="state" id="kioskOut">
@@ -100,7 +103,7 @@
     <p>Tap your name.</p>
     <div id="kioskList"></div>
     <div class="err" id="errK"></div>
-    <p style="margin-top:18px"><a href="javascript:kioskBackToSignIn()" style="font-weight:700;color:var(--grs)">← Back to sign in</a></p>
+    <p style="margin-top:18px"><a href="#" onclick="kioskBackToSignIn();return false" style="font-weight:700;color:var(--grs)">← Back to sign in</a></p>
   </div>
 
   <div class="state" id="stIn">
@@ -112,6 +115,13 @@
     <button class="btn out" onclick="signOut()">📷 Sign out of site</button>
     <p class="note">Signing out takes a quick photo — proof you were on site at the end of the day.</p>
     <div class="err" id="errOut"></div>
+  </div>
+
+  <div class="state" id="stOut">
+    <div class="big">👋</div>
+    <h2 id="outTitle">You're signed out</h2>
+    <p id="outMeta"></p>
+    <p style="margin-top:18px"><a href="#" onclick="backToForm();return false" style="font-weight:700;color:var(--grs)">Sign in again</a></p>
   </div>
 
   <div class="state" id="stBad">
@@ -205,12 +215,45 @@ async function api(path, body){
   if(!r.ok){
     const err = new Error(data.error || 'Something went wrong');
     if(data.induction_required) err.induction_required = data.induction_required;
+    if(data.already_in) err.already_in = data.already_in;
     throw err;
   }
   return data;
 }
 function showErr(id,msg){ const e=el(id); e.textContent=msg; e.style.display='block'; }
 function hideErr(){ el('err').style.display='none'; el('errOut').style.display='none'; }
+const fmtT = t => new Date(t).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+
+// Show the "you're signed in" screen for an open record and remember it on this phone
+function enterSignedIn(id, name, in_at, intro){
+  const at = fmtT(in_at);
+  localStorage.setItem(LS, JSON.stringify({ id, name, at }));
+  el('form').style.display='none'; el('stOut').style.display='none';
+  el('inTitle').textContent = name + " — you're signed in";
+  el('inMeta').innerHTML = (intro ? intro + ' ' : '') + 'Signed in at <span class="meta">'+at+'</span>';
+  el('f_note_out').value = '';
+  el('stIn').style.display='block';
+  hideErr();
+}
+
+// Personal link, phone has no saved state: look the open sign-in up by name
+async function findOpenSignIn(){
+  hideErr();
+  const name = el('f_name').value.trim();
+  if(!name){ showErr('err','Enter your name first, then tap "Already signed in? Sign out here"'); el('f_name').focus(); return; }
+  try{
+    const r = await api('/open?'+tokQ()+'&name='+encodeURIComponent(name));
+    enterSignedIn(r.id, r.name, r.in_at, 'Found your sign-in.');
+  }catch(e){ showErr('err', e.message); }
+}
+
+function backToForm(){
+  el('stOut').style.display='none'; el('stIn').style.display='none';
+  const me = JSON.parse(localStorage.getItem('grs_me') || 'null');
+  if(me){ el('f_name').value = me.name||''; el('f_company').value = me.company||''; el('f_type').value = me.type||'staff'; }
+  el('f_note').value=''; PHOTO=null; el('photoPreview').style.display='none'; el('photoPrompt').textContent='📷 Take your photo';
+  el('form').style.display='block'; hideErr();
+}
 
 async function boot(){
   if(!T && !K){ el('stBad').style.display='block'; return; }
@@ -227,7 +270,7 @@ async function boot(){
     const saved = JSON.parse(localStorage.getItem(LS) || 'null');
     if(saved && saved.id){
       el('inTitle').textContent = saved.name + " — you're signed in";
-      el('inMeta').textContent = 'Signed in at ' + saved.at;
+      el('inMeta').innerHTML = 'Signed in at <span class="meta">' + saved.at + '</span>';
       el('stIn').style.display='block';
     } else {
       const me = JSON.parse(localStorage.getItem('grs_me') || 'null');
@@ -396,6 +439,10 @@ async function signIn(){
     el('stIn').style.display='block';
   }catch(e){
     if(e.induction_required){ startInductions(e.induction_required); }
+    else if(e.already_in){
+      localStorage.setItem('grs_me', JSON.stringify({ name, company:el('f_company').value.trim(), type:el('f_type').value }));
+      enterSignedIn(e.already_in.id, name, e.already_in.in_at, "You're already signed in on this site.");
+    }
     else showErr('err', e.message);
   }finally{
     btn.disabled=false; btn.textContent='Sign in to site';
@@ -405,19 +452,27 @@ async function signIn(){
 async function signOut(){
   hideErr();
   const saved = JSON.parse(localStorage.getItem(LS) || 'null');
-  if(!saved){ location.reload(); return; }
+  if(!saved){ backToForm(); showErr('err','This phone has no saved sign-in. Enter your name and tap "Already signed in? Sign out here".'); return; }
   askOutPhoto(async (photo) => { await doSignOut(saved, photo); });
 }
 async function doSignOut(saved, photo){
   const pos = await getPos(4000);
   try{
-    await api('/sign-out', { ...tok(), id:saved.id, lat:pos?.lat, lng:pos?.lng, photo, note: el('f_note_out').value.trim().slice(0,500) || null });
+    const r = await api('/sign-out', { ...tok(), id:saved.id, lat:pos?.lat, lng:pos?.lng, photo, note: el('f_note_out').value.trim().slice(0,500) || null });
     localStorage.removeItem(LS);
     el('stIn').style.display='none';
-    el('form').style.display='block';
-    el('inTitle').textContent = '';
+    el('outTitle').textContent = saved.name + " — you're signed out";
+    el('outMeta').innerHTML = 'Signed out at <span class="meta">'+fmtT(r.out_at || Date.now())+'</span>. Photo recorded.';
+    el('stOut').style.display='block';
   }catch(e){
-    if(/already|No open/i.test(e.message)){ localStorage.removeItem(LS); location.reload(); return; }
+    if(/already|No open/i.test(e.message)){
+      localStorage.removeItem(LS);
+      el('stIn').style.display='none';
+      el('outTitle').textContent = "Already signed out";
+      el('outMeta').textContent = 'This sign-in was already closed, so there was nothing to sign out of.';
+      el('stOut').style.display='block';
+      return;
+    }
     showErr('errOut', e.message);
   }
 }

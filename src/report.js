@@ -34,6 +34,7 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 
 function rowStatus(r) {
   if (!r.out_at) return { code: 'open', label: 'Still signed in' };
+  if (r.closed_by) return { code: 'portal', label: `Signed out from the portal by ${r.closed_by}` };
   if (r.auto_closed) return { code: 'auto', label: 'Auto-closed, hours unverified' };
   if (r.out_dist_m != null && r.out_dist_m > GEOFENCE()) return { code: 'remote', label: `Signed out ${distLabel(r.out_dist_m)} from site` };
   return { code: 'out', label: 'Signed out' };
@@ -42,7 +43,7 @@ function rowStatus(r) {
 // The day's attendance, grouped by site. date = YYYY-MM-DD (London day).
 export async function buildDailyReport(date) {
   const { rows } = await query(`
-    SELECT a.id, a.name, a.company, a.type, a.in_at, a.out_at, a.note, a.out_note, a.out_dist_m, a.auto_closed,
+    SELECT a.id, a.name, a.company, a.type, a.in_at, a.out_at, a.note, a.out_note, a.out_dist_m, a.auto_closed, a.closed_by,
            (a.photo IS NOT NULL) AS has_photo, (a.out_photo IS NOT NULL) AS has_out_photo,
            s.id AS site_id, s.ref AS site_ref, s.name AS site_name
     FROM attendance a JOIN sites s ON s.id = a.site_id
@@ -57,9 +58,9 @@ export async function buildDailyReport(date) {
     ORDER BY a.in_at`, [date]);
 
   const sites = new Map();
-  const totals = { in: 0, out: 0, open: 0, remote: 0, auto: 0, notes: 0 };
+  const totals = { in: 0, out: 0, open: 0, remote: 0, auto: 0, portal: 0, notes: 0 };
   for (const r of rows) {
-    if (!sites.has(r.site_id)) sites.set(r.site_id, { id: r.site_id, ref: r.site_ref, name: r.site_name, rows: [], counts: { in: 0, out: 0, open: 0, remote: 0, auto: 0 } });
+    if (!sites.has(r.site_id)) sites.set(r.site_id, { id: r.site_id, ref: r.site_ref, name: r.site_name, rows: [], counts: { in: 0, out: 0, open: 0, remote: 0, auto: 0, portal: 0 } });
     const st = sites.get(r.site_id);
     const status = rowStatus(r);
     const hours = r.out_at ? Math.round((new Date(r.out_at) - new Date(r.in_at)) / 36000) / 100 : null;
@@ -67,7 +68,7 @@ export async function buildDailyReport(date) {
       id: r.id, name: r.name, company: r.company, type: r.type,
       in_at: r.in_at, out_at: r.out_at, in: fmtT(r.in_at), out: fmtT(r.out_at), hours,
       status: status.code, status_label: status.label,
-      note: r.note, out_note: r.out_note, out_dist_m: r.out_dist_m,
+      note: r.note, out_note: r.out_note, out_dist_m: r.out_dist_m, closed_by: r.closed_by,
       has_photo: r.has_photo, has_out_photo: r.has_out_photo
     });
     st.counts.in++; totals.in++;
@@ -75,6 +76,7 @@ export async function buildDailyReport(date) {
     else { st.counts.out++; totals.out++; }
     if (status.code === 'remote') { st.counts.remote++; totals.remote++; }
     if (status.code === 'auto') { st.counts.auto++; totals.auto++; }
+    if (status.code === 'portal') { st.counts.portal++; totals.portal++; }
     if (r.note || r.out_note) totals.notes++;
   }
   return {
@@ -99,12 +101,12 @@ export function renderReport(rep) {
   // ---- plain text
   const L = [];
   L.push(`GRS Contractors: end of day attendance, ${rep.date_label}`);
-  L.push(`${t.in} signed in across ${t.sites} site${t.sites === 1 ? '' : 's'}. ${t.out} signed out. ${t.open} still signed in.${t.remote ? ` ${t.remote} signed out away from site.` : ''}`);
+  L.push(`${t.in} signed in across ${t.sites} site${t.sites === 1 ? '' : 's'}. ${t.out} signed out. ${t.open} still signed in.${t.remote ? ` ${t.remote} signed out away from site.` : ''}${t.portal ? ` ${t.portal} signed out from the portal by a manager.` : ''}`);
   L.push('');
   for (const s of rep.sites) {
     L.push(`${s.ref}: ${s.name}  (${s.counts.in} in, ${s.counts.out} out${s.counts.open ? `, ${s.counts.open} STILL SIGNED IN` : ''})`);
     for (const r of s.rows) {
-      const flag = r.status === 'open' ? '  ** NOT SIGNED OUT **' : r.status === 'remote' ? `  (${r.status_label})` : r.status === 'auto' ? '  (auto-closed)' : '';
+      const flag = r.status === 'open' ? '  ** NOT SIGNED OUT **' : (r.status === 'remote' || r.status === 'portal') ? `  (${r.status_label})` : r.status === 'auto' ? '  (auto-closed)' : '';
       L.push(`  ${r.name}${r.company ? ', ' + r.company : ''}: in ${r.in}${r.out ? ', out ' + r.out : ''}${r.hours != null ? ', ' + r.hours.toFixed(2) + ' hrs' : ''}${flag}`);
       if (r.note) L.push(`      Note on sign-in: ${r.note}`);
       if (r.out_note) L.push(`      Note on sign-out: ${r.out_note}`);
@@ -128,6 +130,7 @@ export function renderReport(rep) {
     r.status === 'open' ? pill('#fbeae7', BAD, 'STILL SIGNED IN')
     : r.status === 'remote' ? pill('#fbf2dd', WARN, esc(r.status_label))
     : r.status === 'auto' ? pill('#fbf2dd', WARN, 'Auto-closed')
+    : r.status === 'portal' ? pill('#f4f1ea', MUTED, esc(r.status_label))
     : pill('#e9f4ee', OK, 'Signed out');
   const siteBlocks = rep.sites.map(s => `
     <h3 style="margin:26px 0 8px;font-size:15px;color:${INK}">
@@ -171,6 +174,7 @@ export function renderReport(rep) {
         <td style="padding:6px 0"><div style="font-size:26px;font-weight:800;color:${OK}">${t.out}</div>signed out</td>
         <td style="padding:6px 0"><div style="font-size:26px;font-weight:800;color:${t.open ? BAD : INK}">${t.open}</div>still signed in</td>
         <td style="padding:6px 0"><div style="font-size:26px;font-weight:800;color:${t.remote ? WARN : INK}">${t.remote}</div>signed out away from site</td>
+        ${t.portal ? `<td style="padding:6px 0"><div style="font-size:26px;font-weight:800;color:${INK}">${t.portal}</div>signed out from the portal</td>` : ''}
       </tr></table>
       ${siteBlocks || `<p style="margin:20px 0 0;color:${MUTED}">No sign-ins were recorded today.</p>`}
       ${stale}

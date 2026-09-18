@@ -1,14 +1,19 @@
 // ============================================================
-//  Outbound email. Two transports, picked by environment:
-//    MAILER_URL (+ MAILER_SECRET)  Apps Script web app that sends
-//                                  from a Gmail account
-//                                  (tools/grs-mailer.gs)
+//  Outbound email. Three transports, picked by environment
+//  (first one configured wins):
+//    SMTP_USER + SMTP_PASS         Gmail SMTP with an App Password
+//                                  (SMTP_HOST/SMTP_PORT optional,
+//                                  default smtp.gmail.com:465)
+//    MAILER_URL (+ MAILER_SECRET)  Apps Script web app (tools/grs-mailer.gs)
 //    RESEND_API_KEY (+ MAIL_FROM)  Resend HTTP API
-//  With neither set, sendMail() reports not-configured and nothing
+//  With none set, sendMail() reports not-configured and nothing
 //  else in the app is affected.
 // ============================================================
 
+import nodemailer from 'nodemailer';
+
 export function mailTransport() {
+  if (process.env.SMTP_USER && process.env.SMTP_PASS) return 'smtp';
   if (process.env.MAILER_URL) return 'apps-script';
   if (process.env.RESEND_API_KEY) return 'resend';
   return null;
@@ -60,10 +65,25 @@ export async function sendMail({ to, subject, text, html }) {
   const via = mailTransport();
   const list = (Array.isArray(to) ? to : String(to || '').split(','))
     .map(s => s.trim()).filter(Boolean);
-  if (!via) return { ok: false, via: null, error: 'Email is not configured (set MAILER_URL or RESEND_API_KEY)' };
+  if (!via) return { ok: false, via: null, error: 'Email is not configured (set SMTP_USER and SMTP_PASS, or MAILER_URL, or RESEND_API_KEY)' };
   if (!list.length) return { ok: false, via, error: 'No recipients' };
 
   try {
+    if (via === 'smtp') {
+      const port = Number(process.env.SMTP_PORT || 465);
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.gmail.com',
+        port, secure: port === 465,
+        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+        connectionTimeout: TIMEOUT_MS, greetingTimeout: TIMEOUT_MS, socketTimeout: TIMEOUT_MS
+      });
+      await transporter.sendMail({
+        from: process.env.MAIL_FROM || `GRS Safety <${process.env.SMTP_USER}>`,
+        to: list.join(', '), subject, text: text || '', html: html || undefined
+      });
+      return { ok: true, via };
+    }
+
     if (via === 'apps-script') {
       const r = await postToAppsScript(process.env.MAILER_URL, {
         secret: process.env.MAILER_SECRET || '',

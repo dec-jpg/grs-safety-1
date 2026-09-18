@@ -190,12 +190,14 @@ router.post('/sign-in', wrap(async (req, res) => {
   }
 
   const already = await one(
-    `SELECT id FROM attendance WHERE lower(name) = lower($1) AND site_id = $2 AND out_at IS NULL`,
+    `SELECT id, in_at FROM attendance WHERE lower(name) = lower($1) AND site_id = $2 AND out_at IS NULL`,
     [name.trim(), site.id]
   );
   if (already) {
     logRefusal(site, req.body, 'already_in', d);
-    return res.status(409).json({ error: 'You are already signed in on this site' });
+    // Hand back the open record so the page can offer sign-out instead of a dead end
+    // (a phone that lost its saved state, or a different browser, lands here).
+    return res.status(409).json({ error: 'You are already signed in on this site', already_in: { id: already.id, in_at: already.in_at } });
   }
 
   // Induction gate: no valid induction, no sign-in. The page walks them
@@ -250,6 +252,20 @@ router.post('/sign-out', wrap(async (req, res) => {
   );
   if (!row) return res.status(404).json({ error: 'No open sign-in found — you may already be signed out' });
   res.json({ ok: true, out_at: row.out_at, out_dist_m: row.out_dist_m });
+}));
+
+// Personal link: find my open sign-in by name, so sign-out works even when the
+// phone has no saved state (link opened in a different browser, storage cleared).
+router.get('/open', wrap(async (req, res) => {
+  const site = await siteByToken(req.query.t, req.query.k);
+  if (!site) return res.status(404).json({ error: 'Link not recognised' });
+  const name = String(req.query.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Enter your name' });
+  const row = await one(
+    `SELECT id, name, in_at FROM attendance WHERE lower(name) = lower($1) AND site_id = $2 AND out_at IS NULL ORDER BY in_at DESC LIMIT 1`,
+    [name, site.id]);
+  if (!row) return res.status(404).json({ error: `No open sign-in found for ${name} on ${site.ref}` });
+  res.json({ id: row.id, name: row.name, in_at: row.in_at });
 }));
 
 // Kiosk only: who's on site, for tap-to-sign-out at the tablet
