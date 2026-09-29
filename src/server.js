@@ -11,6 +11,8 @@ import auditsRoutes from './routes/audits.js';
 import attendanceRoutes from './routes/attendance.js';
 import publicRoutes from './routes/public.js';
 import operativesRoutes from './routes/operatives.js';
+import { usersRouter, inviteRouter } from './routes/users.js';
+import { readOnlyForViewers } from './auth.js';
 import { ensureSchema } from './db/ensure.js';
 import { startDailyReportScheduler } from './report.js';
 
@@ -20,8 +22,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(express.json({ limit: '8mb' }));  // sign-in and sign-out photos ride in JSON
 app.use(cookieParser());
+app.set('trust proxy', 1);          // Railway sits behind a proxy; needed for invite links and rate limiting
 
 // API
+app.use('/api', readOnlyForViewers); // viewer role: GET only
 app.use('/api/auth', authRoutes);
 app.use('/api/sites', sitesRoutes);
 app.use('/api/findings', findingsRoutes);
@@ -29,6 +33,8 @@ app.use('/api/audits', auditsRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/operatives', operativesRoutes);
+app.use('/api/users', usersRouter);
+app.use('/api/invite', inviteRouter);
 
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 

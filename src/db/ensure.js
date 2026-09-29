@@ -32,6 +32,15 @@ const STATEMENTS = [
   "ALTER TABLE sites ADD COLUMN IF NOT EXISTS signin_token TEXT",
   "ALTER TABLE sites ADD COLUMN IF NOT EXISTS kiosk_token TEXT",
 
+  // -- users: invites, roles, deactivation (portal logins managed by GRS admins)
+  "ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL",
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true",
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS invite_token TEXT",
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS invite_expires TIMESTAMPTZ",
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ",
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_by INT",
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_invite_token ON users(invite_token) WHERE invite_token IS NOT NULL",
+
   // -- tables the sign-in path reads
   "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)",
   `CREATE TABLE IF NOT EXISTS site_inductions (

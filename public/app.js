@@ -521,8 +521,106 @@ const VIEWS = {
   coshh:{t:"COSHH", c:"Substance register and assessments",
     r:()=>preview('COSHH','A substance register with hazard classification and assessment review dates.')},
   packs:{t:"Site packs", c:"Site-specific document bundles",
-    r:()=>preview('Site packs','Per-site document bundles — CPP, RAMS, COSHH, permits and inspection records.')}
+    r:()=>preview('Site packs','Per-site document bundles — CPP, RAMS, COSHH, permits and inspection records.')},
+  users:{t:"Users", c:"Who can log in to the portal", r:vUsers}
 };
+
+// ============================================================
+//  USERS — portal logins, admin only
+// ============================================================
+const ROLE_LABEL = { admin:'Admin', manager:'Manager', viewer:'View only', consultant:'Admin' };
+const ROLE_HELP = 'Admin can add and remove logins. Manager can do everything else. View only can look but not change anything.';
+async function vUsers(){
+  const list = await api('/users');
+  STATE.users = list;
+  const me = STATE.user?.id;
+  const rows = list.map(u=>`<tr style="${u.active?'':'opacity:.55'}">
+    <td><div class="site-name">${esc(u.name)}${u.id===me?' <span class="pill" style="background:var(--paper);color:var(--muted)">you</span>':''}</div><div class="site-meta">${esc(u.email)}</div></td>
+    <td>${u.active
+      ? `<select onchange="userRole(${u.id},this.value)" ${u.id===me?'disabled':''} style="padding:5px 8px;border:1px solid var(--line);border-radius:7px;font-family:inherit;font-size:12px">
+          ${['admin','manager','viewer'].map(r=>`<option value="${r}" ${(u.role==='consultant'?'admin':u.role)===r?'selected':''}>${ROLE_LABEL[r]}</option>`).join('')}</select>`
+      : '<span class="pill bad">Switched off</span>'}</td>
+    <td>${!u.active ? '' : u.has_password
+      ? '<span class="pill ok">Set up</span>'
+      : (u.invite_expires && new Date(u.invite_expires) > Date.now())
+        ? `<span class="pill warn">Invited · link live until ${fmtDate2(u.invite_expires)}</span>`
+        : '<span class="pill bad">Invite run out</span>'}</td>
+    <td class="num" style="font-family:var(--mono);font-size:12px;color:var(--muted)">${u.last_login?fmtDate2(u.last_login):'never'}</td>
+    <td class="num" style="white-space:nowrap">
+      ${u.active ? `<button class="btn-sm" onclick="userInvite(${u.id})">${u.has_password?'Reset link':'Re-invite'}</button>` : ''}
+      ${u.id===me ? '' : `<button class="btn-sm" onclick="userActive(${u.id},${!u.active})">${u.active?'Switch off':'Switch on'}</button>`}
+    </td>
+  </tr>`).join('');
+  return `
+  <div class="sec"><div class="grid g3">
+    <div class="stat accent"><div class="k">Logins</div><div class="v">${list.filter(u=>u.active).length}</div><div class="foot">Active portal users</div></div>
+    <div class="stat"><div class="k">Waiting to set up</div><div class="v">${list.filter(u=>u.active&&!u.has_password).length}</div><div class="foot">Invited, not yet signed in</div></div>
+    <div class="stat"><div class="k">Admins</div><div class="v">${list.filter(u=>u.active&&(u.role==='admin'||u.role==='consultant')).length}</div><div class="foot">Can manage logins</div></div>
+  </div></div>
+  <div class="sec"><div class="sec-head"><h2>Portal logins</h2><span class="rule"></span>
+      <button class="btn-primary" style="padding:7px 14px;font-size:12px" onclick="userModal()">+ Add login</button></div>
+    <p style="font-size:12.5px;color:var(--muted);margin:-6px 0 12px">${ROLE_HELP} Add someone and you get a link to send them; they set their own password. Nobody needs to know anyone else's password.</p>
+    <div class="card"><table>
+      <thead><tr><th>Person</th><th>Role</th><th>Status</th><th class="num">Last signed in</th><th class="num"></th></tr></thead>
+      <tbody>${rows}</tbody></table></div></div>`;
+}
+function userModal(){
+  openModal(`
+    <h3>Add a login</h3>
+    <label>Name</label><input id="u_name" placeholder="First and last name">
+    <label>Email</label><input id="u_email" type="email" placeholder="Their work email">
+    <label>Role</label>
+    <select id="u_role"><option value="manager" selected>Manager</option><option value="viewer">View only</option><option value="admin">Admin</option></select>
+    <p style="font-size:12px;color:var(--muted);margin:8px 0 14px">${ROLE_HELP}</p>
+    <div class="modal-act"><button class="btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn-primary" onclick="userSave()">Add and get link</button></div>`);
+}
+async function userSave(){
+  const body = { name: el('u_name').value.trim(), email: el('u_email').value.trim(), role: el('u_role').value };
+  if(!body.name || !body.email){ toast('Name and email needed'); return; }
+  try{ const r = await api('/users', { method:'POST', body }); inviteLinkModal(r); await show('users'); }
+  catch(e){ toast(e.message); }
+}
+async function userInvite(id){
+  try{ const r = await api(`/users/${id}/invite`, { method:'POST' }); inviteLinkModal(r); await show('users'); }
+  catch(e){ toast(e.message); }
+}
+function inviteLinkModal(r){
+  openModal(`
+    <h3>Send ${esc(r.user.name)} this link</h3>
+    <p style="font-size:13px;color:var(--muted);margin:0 0 12px">${r.emailed ? 'It has been emailed to them as well.' : 'WhatsApp or text it to them.'} It works until ${fmtDate2(r.expires)}, then they will need a new one.</p>
+    <input id="inv_link" value="${esc(r.link)}" readonly onclick="this.select()" style="font-family:var(--mono);font-size:12px">
+    <div class="modal-act"><button class="btn-ghost" onclick="closeModal()">Done</button>
+      <button class="btn-primary" onclick="copyInvite()">Copy link</button></div>`);
+}
+function copyInvite(){
+  const i = el('inv_link'); i.select();
+  navigator.clipboard.writeText(i.value).then(()=>toast('Link copied'), ()=>{ document.execCommand('copy'); toast('Link copied'); });
+}
+async function userRole(id, role){
+  try{ await api(`/users/${id}`, { method:'PATCH', body:{ role } }); toast('Role updated. Takes effect when they next sign in.'); }
+  catch(e){ toast(e.message); await show('users'); }
+}
+async function userActive(id, active){
+  try{ await api(`/users/${id}`, { method:'PATCH', body:{ active } }); toast(active?'Login switched on':'Login switched off'); await show('users'); }
+  catch(e){ toast(e.message); }
+}
+function changePasswordModal(){
+  openModal(`
+    <h3>Change your password</h3>
+    <label>Current password</label><input id="pw_cur" type="password" autocomplete="current-password">
+    <label>New password</label><input id="pw_new" type="password" autocomplete="new-password">
+    <label>New password again</label><input id="pw_new2" type="password" autocomplete="new-password">
+    <div class="modal-act"><button class="btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn-primary" onclick="changePassword()">Save</button></div>`);
+}
+async function changePassword(){
+  const current = el('pw_cur').value, password = el('pw_new').value;
+  if(password.length < 8){ toast('New password needs 8 characters or more'); return; }
+  if(password !== el('pw_new2').value){ toast('New passwords do not match'); return; }
+  try{ await api('/auth/change-password', { method:'POST', body:{ current, password } }); closeModal(); toast('Password changed'); }
+  catch(e){ toast(e.message); }
+}
 
 async function show(view){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===view));
@@ -611,6 +709,7 @@ document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=
 el('burger').addEventListener('click',()=>{el('rail').classList.add('open');el('scrim').classList.add('show');});
 el('scrim').addEventListener('click',()=>{el('rail').classList.remove('open');el('scrim').classList.remove('show');});
 el('logout').addEventListener('click', async ()=>{ await api('/auth/logout',{method:'POST'}); location.href='/login.html'; });
+el('chpw').addEventListener('click', changePasswordModal);
 
 el('logo').src = window.__GRS_LOGO__ || '';
 
@@ -619,6 +718,13 @@ el('logo').src = window.__GRS_LOGO__ || '';
     const { user } = await api('/auth/me');
     STATE.user = user;
     el('who').textContent = user.name;
+    if(user.role === 'admin' || user.role === 'consultant'){
+      el('nav-users').style.display = '';
+      api('/users').then(l=>{ el('ct-users').textContent = l.filter(u=>u.active).length; }).catch(()=>{});
+    }
+    if(user.role === 'viewer'){
+      document.querySelectorAll('.btn-primary').forEach(b=>b.style.display='none');
+    }
     await refreshCounts();
     await show('overview');
   }catch(e){ /* redirected to login */ }

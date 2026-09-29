@@ -87,7 +87,8 @@
   .g4{grid-template-columns:repeat(4,1fr);}
   .g2{grid-template-columns:1.5fr 1fr;}
   .g2e{grid-template-columns:1fr 1fr;}
-  @media(max-width:860px){.g4,.g2,.g2e{grid-template-columns:1fr;}}
+  .g3{grid-template-columns:repeat(3,1fr);}
+  @media(max-width:860px){.g4,.g3,.g2,.g2e{grid-template-columns:1fr;}}
 
   .card{background:var(--card);border:1px solid var(--line);border-radius:13px;
     padding:20px 22px;box-shadow:var(--shadow);}
@@ -284,6 +285,10 @@
         <svg class="ic" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7L12 12l8.7-5M12 22V12"/></svg>
         Site packs <span class="ct" style="opacity:.5">soon</span>
       </div>
+      <div class="nav-item" data-view="users" id="nav-users" style="display:none">
+        <svg class="ic" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg>
+        Users <span class="ct" id="ct-users">—</span>
+      </div>
     </nav>
     <div class="rail-foot">
       <div class="live"><span class="dot" style="background:#7fd1a0"></span>Live</div>
@@ -303,6 +308,7 @@
       </div>
       <div class="userchip">
         <span>Signed in as <b id="who">—</b></span>
+        <span class="out" id="chpw" title="Change your password">Password</span>
         <span class="out" id="logout">Sign out</span>
       </div>
     </div>
