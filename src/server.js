@@ -12,6 +12,7 @@ import attendanceRoutes from './routes/attendance.js';
 import publicRoutes from './routes/public.js';
 import operativesRoutes from './routes/operatives.js';
 import { usersRouter, inviteRouter } from './routes/users.js';
+import policiesRoutes from './routes/policies.js';
 import { readOnlyForViewers } from './auth.js';
 import { ensureSchema } from './db/ensure.js';
 import { startDailyReportScheduler } from './report.js';
@@ -33,6 +34,7 @@ app.use('/api/audits', auditsRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/operatives', operativesRoutes);
+app.use('/api/policies', policiesRoutes);
 app.use('/api/users', usersRouter);
 app.use('/api/invite', inviteRouter);
 
