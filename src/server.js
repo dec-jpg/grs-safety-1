@@ -13,6 +13,7 @@ import publicRoutes from './routes/public.js';
 import operativesRoutes from './routes/operatives.js';
 import { usersRouter, inviteRouter } from './routes/users.js';
 import policiesRoutes from './routes/policies.js';
+import { tbtRouter, tbtPublicRouter } from './routes/tbt.js';
 import { readOnlyForViewers } from './auth.js';
 import { ensureSchema } from './db/ensure.js';
 import { startDailyReportScheduler } from './report.js';
@@ -35,6 +36,8 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/operatives', operativesRoutes);
 app.use('/api/policies', policiesRoutes);
+app.use('/api/tbt/p', tbtPublicRouter);   // operative talk links, no login
+app.use('/api/tbt', tbtRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/invite', inviteRouter);
 
@@ -42,6 +45,11 @@ app.get('/api/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
 // Static front-end
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// Toolbox talk links shared on WhatsApp: /t/TOKEN opens the talk page
+app.get('/t/:token', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'talk.html'));
+});
 
 // SPA fallback: send index for any non-API route
 app.get('*', (req, res) => {

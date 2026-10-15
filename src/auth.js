@@ -57,7 +57,7 @@ export function requireRole(...roles) {
 // Mounted in server.js before the routers; skips auth, public and invite paths.
 export function readOnlyForViewers(req, res, next) {
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
-  if (/^\/api\/(auth|public|invite|health)\b/.test(req.path)) return next();
+  if (/^\/api\/(auth|public|invite|health|tbt\/p)\b/.test(req.path)) return next();
   const token = req.cookies?.[COOKIE];
   if (!token) return next(); // let the route's own requireAuth answer
   try {

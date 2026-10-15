@@ -1,0 +1,43 @@
+{
+  "comment": "The GRS toolbox talk library. Produced by Safety Simplified Ltd; talks are issued from the portal, each issue getting its own link and register. A new talk added here arrives with the next deploy. Body text: blank lines split paragraphs, lines starting with '• ' render as tick bullets, **text** renders bold. A section with an empty body renders as a full-width statement slab. An entry with an issue_token is issued automatically on first boot with that fixed token, so the link is live the moment the deploy lands.",
+  "talks": [
+    {
+      "ref": "GRS-TBT-EXZ-01",
+      "title": "STOP WORK: Excavation Within a Gas Main Exclusion Zone",
+      "category": "Safety alert",
+      "issue_token": "exz-ptl-k7m3q9",
+      "intro": "Pear Tree Lane, Euxton · 15 October 2026. Read this talk in full, then sign the acknowledgement at the bottom. It applies to everyone involved in excavation work on GRS sites.",
+      "questions": [],
+      "sections": [
+        {
+          "heading": "What Happened",
+          "body": "**On 15 October 2026, excavation took place within an area clearly identified as a NO DIG ZONE** at Pear Tree Lane, Euxton.\n\nThe area contains significant underground services, including intermediate pressure and medium pressure gas mains. An 11kV electricity cable has also been identified in the vicinity.\n\nThe site supervisor had arranged a meeting with Cadent for 11:30 am to agree how excavation could safely proceed near the gas infrastructure. Operatives had been instructed where excavation could and could not take place. Before that consultation took place, excavation proceeded within the prohibited area. The supervisor discovered the excavation on arriving for the scheduled meeting.\n\nThe available information does not establish that any gas main was struck or damaged. That does not reduce the seriousness of this incident: excavation took place in a restricted area, close to live gas infrastructure, without the required authorisation.\n\nNobody is named or blamed in this talk. It is issued across GRS so that everyone understands the standard that applies on every site, every day."
+        },
+        {
+          "heading": "What the Approved RAMS Already Require",
+          "body": "The RAMS for this work already set out the controls for excavation near underground services:\n\n• Review of underground service drawings and identification of existing services.\n• CAT scanning and marking of identified services.\n• Controlled exposure of services by hand digging in accordance with HSG47.\n• Completion and authorisation of the Principal Contractor's permit to dig.\n• Use of vacuum excavation methods where required.\n• No excavation in the identified restricted area until Cadent has attended, advised on the safe method and the work has been authorised.\n\n**The RAMS specifically prohibit digging within the designated area before Cadent approval.** These controls only protect you when they are followed on the ground."
+        },
+        {
+          "heading": "NO DIG MEANS NO DIG",
+          "body": ""
+        },
+        {
+          "heading": "The Standard on Every GRS Site",
+          "body": "• **NO DIG MEANS NO DIG.** No operative may enter or excavate within an exclusion zone until formal authorisation has been given.\n• **A planned meeting is not permission to proceed.** Work must wait until Cadent's advice has been received and the agreed controls are in place.\n• **Follow the RAMS and the permit to dig.** A permit must relate to the specific location and activity. A permit covering other areas does not authorise excavation in a restricted zone.\n• **Confirm instructions before starting.** If there is any doubt about the excavation boundary, stop and speak to the supervisor.\n• **Protect underground services.** Service plans, CAT scanning and trial holes are essential, but they do not override a prohibition on excavation.\n• **No unauthorised changes.** Operatives must not extend excavations, change routes or move into another work area without approval.\n• **Stop work and report concerns.** Anyone who identifies a departure from the agreed method must stop the activity and immediately inform supervision."
+        },
+        {
+          "heading": "What Happens Now",
+          "body": "• All excavation within the affected exclusion zone has been stopped.\n• The restricted area is secured and clearly identified.\n• Cadent will confirm whether the excavation has affected any gas infrastructure, and any necessary safety checks will be agreed.\n• The RAMS and permit to dig arrangements are being reviewed and rebriefed.\n• Every operative must understand the excavation boundaries and the requirement for authorisation.\n• Work will not restart in the affected area until Cadent's advice has been received, the agreed controls are implemented and the relevant permit has been authorised."
+        },
+        {
+          "heading": "NO EXCAVATION IN A RESTRICTED AREA UNTIL THE REQUIRED APPROVALS AND CONTROLS ARE IN PLACE",
+          "body": ""
+        },
+        {
+          "heading": "Acknowledgement",
+          "body": "I understand that excavation must not take place within a designated NO DIG ZONE without the required authorisation. I will follow the RAMS, permit-to-dig requirements and supervisor instructions, and stop work if I am uncertain."
+        }
+      ]
+    }
+  ]
+}

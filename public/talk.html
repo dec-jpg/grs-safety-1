@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Toolbox Talk · GRS Contractors Ltd</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{ --grs:#EC4B32; --ink:#1f1c17; --muted:#6f685d; --line:#e2dcd2; --paper:#f6f5f2;
+    --alarm:#B3261E; --alarm-light:#fbeae8; --ok:#2f7d4f; --ok-light:#e9f4ee; --slab:#17150F; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'DM Sans',-apple-system,'Segoe UI',Arial,sans-serif;background:var(--paper);color:var(--ink);font-size:15.5px;line-height:1.65}
+  .hd{background:var(--slab);padding:12px 18px;display:flex;align-items:center;gap:14px}
+  .hd img{height:36px;width:auto;display:block}
+  .hd .t{color:#fff;font-size:13px;font-weight:700}
+  .hd .s{color:rgba(255,255,255,.55);font-size:11px}
+  .stop{display:none;background:var(--alarm);color:#fff;text-align:center;font-weight:900;font-size:24px;letter-spacing:.14em;padding:12px 10px;border-bottom:4px solid #7a120e}
+  .wrap{max-width:640px;margin:0 auto;padding:18px 16px 70px}
+  .titlecard{background:#fff;border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:16px}
+  .titlecard h1{font-size:21px;line-height:1.3;margin-bottom:8px}
+  .titlecard .meta{font-size:13px;color:var(--muted);font-weight:600}
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px;margin-bottom:16px;overflow:hidden}
+  .card-h{background:var(--slab);color:#fff;padding:12px 16px;font-weight:700;font-size:15px;display:flex;align-items:center;gap:10px}
+  .card-h .n{background:var(--grs);color:#fff;font-size:12px;font-weight:700;width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .card-b{padding:16px}
+  .card-b p{margin-bottom:11px}
+  .card-b p:last-child{margin-bottom:0}
+  .card-b strong{color:var(--alarm)}
+  ul.ticks{list-style:none;margin:4px 0 12px}
+  ul.ticks:last-child{margin-bottom:0}
+  ul.ticks li{padding:8px 0 8px 26px;position:relative;border-bottom:1px solid #f0ede7;font-size:14.5px}
+  ul.ticks li:last-child{border-bottom:none}
+  ul.ticks li::before{content:'\2713';position:absolute;left:2px;color:var(--grs);font-weight:800}
+  .slab{background:var(--alarm);color:#fff;font-weight:800;text-align:center;padding:20px 18px;border-radius:12px;margin:0 0 16px;font-size:17px;line-height:1.5;letter-spacing:.03em}
+  .qblock{border:1.5px solid var(--line);border-radius:10px;margin-bottom:12px;padding:12px 14px}
+  .qblock.wrong{border-color:var(--alarm);background:var(--alarm-light)}
+  .qblock b{display:block;margin-bottom:8px;font-size:14.5px}
+  .qblock label{display:block;padding:7px 8px;border-radius:7px;font-size:14px}
+  .qblock label:active{background:#f3efe8}
+  .qblock input{margin-right:8px}
+  .note{border-radius:10px;padding:12px 15px;margin-bottom:14px;font-size:13.5px;display:none}
+  .note.err{background:var(--alarm-light);color:#7c2318;border-left:4px solid var(--alarm)}
+  .field{margin-bottom:13px}
+  .field label{display:block;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:5px}
+  .field input{width:100%;border:1.5px solid var(--line);border-radius:8px;padding:12px 13px;font-family:inherit;font-size:16px;background:#fbfaf8;outline:none}
+  .field input:focus{border-color:var(--grs);background:#fff}
+  .ackrow{display:flex;gap:10px;align-items:flex-start;margin:4px 0 16px;font-size:14px}
+  .ackrow input{width:20px;height:20px;margin-top:1px;flex-shrink:0}
+  #sigpad{border:1.5px dashed #b8b0a2;border-radius:8px;background:#fff;width:100%;height:150px;touch-action:none;display:block}
+  .sigrow{display:flex;justify-content:space-between;align-items:center;margin:6px 0 14px}
+  .sigrow span{font-size:12px;color:var(--muted)}
+  .sigrow button{background:none;border:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;font-family:inherit}
+  .btn{width:100%;background:var(--grs);color:#fff;border:none;border-radius:8px;padding:16px;font-family:inherit;font-size:16px;font-weight:800;cursor:pointer;letter-spacing:.02em}
+  .btn:disabled{background:#b8b0a2;cursor:not-allowed}
+  #doneCard{display:none;background:var(--ok-light);border:1.5px solid var(--ok);border-radius:12px;padding:26px 20px;text-align:center}
+  #doneCard h2{color:var(--ok);font-size:19px;margin-bottom:8px}
+  #doneCard p{font-size:14px;color:#3d5a4a;margin-bottom:6px}
+  .state{text-align:center;padding:60px 20px;color:var(--muted);font-size:14.5px}
+  .state h2{color:var(--ink);font-size:19px;margin:10px 0 8px}
+  .state .big{font-size:40px}
+  .foot{text-align:center;font-size:12px;color:#9a9388;margin-top:22px;line-height:1.6}
+</style>
+</head>
+<body>
+
+<div class="hd">
+  <img id="logo" src="" alt="GRS">
+  <div>
+    <div class="t">Toolbox Talk</div>
+    <div class="s">GRS Contractors Ltd</div>
+  </div>
+</div>
+<div class="stop" id="stopBar"></div>
+
+<div class="wrap" id="wrap">
+  <div class="state"><h2>Loading the talk</h2><p>One moment.</p></div>
+</div>
+
+<script src="/logo.js"></script>
+<script>
+(function(){
+  var TOKEN = (location.pathname.split('/')[2] || '').replace(/[^A-Za-z0-9_-]/g, '');
+  var wrap = document.getElementById('wrap');
+  if (window.__GRS_LOGO__) document.getElementById('logo').src = window.__GRS_LOGO__;
+
+  var esc = function(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
+  var inline = function(s){ return esc(s).replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>'); };
+
+  // Body text: blank lines split paragraphs, lines starting with a bullet
+  // render as tick lists, **text** renders bold.
+  function bodyHtml(body){
+    return String(body || '').split(/\n\s*\n/).map(function(p){
+      var lines = p.split('\n').map(function(l){ return l.trim(); }).filter(Boolean);
+      if (!lines.length) return '';
+      if (lines.every(function(l){ return l.indexOf('• ') === 0; }))
+        return '<ul class="ticks">' + lines.map(function(l){ return '<li>' + inline(l.slice(2)) + '</li>'; }).join('') + '</ul>';
+      return '<p>' + lines.map(inline).join('<br>') + '</p>';
+    }).join('');
+  }
+
+  var KEY = 'grs_tbt_who';
+  function savedWho(){ try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch(e){ return {}; } }
+  function saveWho(w){ try { localStorage.setItem(KEY, JSON.stringify(w)); } catch(e){} }
+
+  var TALK = null, attempts = 1;
+
+  function state(icon, title, text){
+    wrap.innerHTML = '<div class="state"><div class="big">' + icon + '</div><h2>' + esc(title) + '</h2><p>' + esc(text) + '</p></div>';
+  }
+
+  function render(){
+    var t = TALK;
+    // A title like "STOP WORK: ..." puts its left part in the red banner.
+    var h1 = t.title, parts = t.title.split(': ');
+    if (parts.length > 1 && parts[0].length <= 16 && parts[0] === parts[0].toUpperCase()) {
+      var bar = document.getElementById('stopBar');
+      bar.textContent = '⚠ ' + parts[0];
+      bar.style.display = 'block';
+      h1 = parts.slice(1).join(': ');
+    }
+    document.title = t.title + ' · GRS Contractors Ltd';
+
+    var num = 0;
+    var sectionsHtml = (t.sections || []).map(function(s){
+      if (!s.body || !s.body.trim())
+        return '<div class="slab">' + inline(s.heading || '') + '</div>';
+      num += 1;
+      return '<div class="card"><div class="card-h"><span class="n">' + num + '</span><span>' + esc(s.heading || '') + '</span></div>' +
+             '<div class="card-b">' + bodyHtml(s.body) + '</div></div>';
+    }).join('');
+
+    var quizHtml = (t.questions && t.questions.length) ?
+      '<div class="card"><div class="card-h"><span class="n">' + (num + 1) + '</span><span>Check your understanding</span></div><div class="card-b">' +
+      '<p style="margin-bottom:14px">Every answer needs to be right before you can sign.</p>' +
+      t.questions.map(function(x, i){
+        return '<div class="qblock" id="q' + i + '"><b>' + (i + 1) + '. ' + esc(x.question) + '</b>' +
+          x.options.map(function(o, j){
+            return '<label><input type="radio" name="q' + i + '" value="' + j + '"> ' + esc(o) + '</label>';
+          }).join('') + '</div>';
+      }).join('') + '</div></div>' : '';
+
+    var who = savedWho();
+    wrap.innerHTML =
+      '<div class="titlecard"><h1>' + esc(h1) + '</h1>' +
+      (t.ref || t.intro ? '<div class="meta">' + esc([t.ref, t.intro].filter(Boolean).join(' · ')) + '</div>' : '') + '</div>' +
+      sectionsHtml + quizHtml +
+      '<div class="card" id="signCard"><div class="card-h"><span class="n">✎</span><span>Sign to confirm</span></div><div class="card-b">' +
+      '<div class="note err" id="err"></div>' +
+      '<div class="field"><label>First name and surname</label><input id="f_name" autocomplete="name" value="' + esc(who.name || '') + '"></div>' +
+      '<div class="field"><label>Mobile number</label><input id="f_phone" type="tel" inputmode="tel" autocomplete="tel" value="' + esc(who.phone || '') + '"></div>' +
+      '<div class="ackrow"><input type="checkbox" id="f_ack"><label for="f_ack">I confirm I have read and understood this toolbox talk and will work to it.</label></div>' +
+      '<div class="field"><label>Signature</label><canvas id="sigpad"></canvas>' +
+      '<div class="sigrow"><span>Sign in the box with your finger</span><button type="button" id="sigclear">Clear</button></div></div>' +
+      '<button class="btn" id="go">Sign the toolbox talk</button>' +
+      '</div></div>' +
+      '<div id="doneCard"><h2>✓ Recorded</h2><p id="doneText"></p>' +
+      '<p><strong>If anything on site does not match what you have just read: stop work and tell your supervisor.</strong></p></div>' +
+      '<p class="foot">' + esc([t.ref, 'Issued by Safety Simplified Ltd for GRS Contractors Ltd'].filter(Boolean).join(' · ')) + '</p>';
+
+    wireSign();
+  }
+
+  function showErr(msg){
+    var n = document.getElementById('err');
+    n.textContent = msg; n.style.display = 'block';
+    n.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
+  function wireSign(){
+    var pad = document.getElementById('sigpad'), ctx = pad.getContext('2d'), drawing = false, drew = false;
+    var r0 = pad.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    pad.width = r0.width * dpr; pad.height = r0.height * dpr;
+    ctx.scale(dpr, dpr); ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#17150F';
+    var pt = function(e){ var r = pad.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+    pad.addEventListener('pointerdown', function(e){ e.preventDefault(); drawing = true; drew = true; pad.setPointerCapture(e.pointerId); var p = pt(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); });
+    pad.addEventListener('pointermove', function(e){ if (!drawing) return; e.preventDefault(); var p = pt(e); ctx.lineTo(p.x, p.y); ctx.stroke(); });
+    ['pointerup','pointercancel','pointerleave'].forEach(function(t){ pad.addEventListener(t, function(){ drawing = false; }); });
+    document.getElementById('sigclear').addEventListener('click', function(){ ctx.clearRect(0, 0, pad.width, pad.height); drew = false; });
+
+    document.getElementById('go').addEventListener('click', function(){
+      var btn = this;
+      document.getElementById('err').style.display = 'none';
+      var name = document.getElementById('f_name').value.trim();
+      var phone = document.getElementById('f_phone').value.trim();
+      if (!name || name.split(/\s+/).length < 2) return showErr('Enter your first name and surname.');
+      if (phone.replace(/\D/g, '').length < 10) return showErr('Enter your mobile number.');
+
+      var answers = [];
+      if (TALK.questions && TALK.questions.length) {
+        var missing = false;
+        TALK.questions.forEach(function(x, i){
+          var sel = document.querySelector('input[name=q' + i + ']:checked');
+          document.getElementById('q' + i).classList.remove('wrong');
+          if (!sel) missing = true; else answers[i] = Number(sel.value);
+        });
+        if (missing) return showErr('Answer every question before signing.');
+      }
+      if (!document.getElementById('f_ack').checked) return showErr('Tick the box to confirm you have read it.');
+      if (!drew) return showErr('Sign in the box to confirm.');
+
+      btn.disabled = true; btn.textContent = 'Recording…';
+      fetch('/api/tbt/p/' + TOKEN + '/sign', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, phone: phone, answers: answers, attempts: attempts, signature: pad.toDataURL('image/png') })
+      }).then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d }; }); })
+      .then(function(res){
+        var d = res.d || {};
+        if (res.ok && d.ok === false && d.wrong) {
+          attempts += 1;
+          d.wrong.forEach(function(i){ var q = document.getElementById('q' + i); if (q) q.classList.add('wrong'); });
+          btn.disabled = false; btn.textContent = 'Sign the toolbox talk';
+          showErr((d.wrong.length === 1 ? 'One answer is' : d.wrong.length + ' answers are') + ' not right. Go back through the talk, change the highlighted ' + (d.wrong.length === 1 ? 'answer' : 'answers') + ' and try again.');
+          var first = document.getElementById('q' + d.wrong[0]);
+          if (first) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          return;
+        }
+        if (!res.ok) throw new Error(d.error || 'Could not record your sign-off. Check your signal and try again.');
+        saveWho({ name: name, phone: phone });
+        document.getElementById('signCard').style.display = 'none';
+        document.getElementById('doneCard').style.display = 'block';
+        document.getElementById('doneText').textContent = d.already
+          ? 'You had already signed this toolbox talk. Nothing more to do.'
+          : 'Thanks ' + name.split(/\s+/)[0] + '. Your sign-off has been recorded on the GRS safety portal.';
+        document.getElementById('doneCard').scrollIntoView({ block: 'center', behavior: 'smooth' });
+      })
+      .catch(function(e){
+        btn.disabled = false; btn.textContent = 'Sign the toolbox talk';
+        showErr(e.message);
+      });
+    });
+  }
+
+  if (!TOKEN) { state('⚠️', 'Link not recognised', 'This toolbox talk link is not valid. Check with your supervisor for the current link.'); return; }
+  fetch('/api/tbt/p/' + TOKEN)
+    .then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d }; }); })
+    .then(function(res){
+      if (!res.ok) return state('⚠️', 'Link not recognised', (res.d && res.d.error) || 'This toolbox talk link is not active. Check with your supervisor for the current link.');
+      TALK = res.d.talk;
+      if (TALK.closed) return state('⚠️', 'This talk has been closed', 'Ask the office if you still need to sign it.');
+      render();
+    })
+    .catch(function(){ state('⚠️', 'No connection', 'Could not load the talk. Check your signal and reopen the link.'); });
+})();
+</script>
+</body>
+</html>
