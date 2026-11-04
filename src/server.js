@@ -14,6 +14,7 @@ import operativesRoutes from './routes/operatives.js';
 import { usersRouter, inviteRouter } from './routes/users.js';
 import policiesRoutes from './routes/policies.js';
 import { tbtRouter, tbtPublicRouter } from './routes/tbt.js';
+import tresorRoutes from './routes/tresor.js';
 import { readOnlyForViewers } from './auth.js';
 import { ensureSchema } from './db/ensure.js';
 import { startDailyReportScheduler } from './report.js';
@@ -40,6 +41,7 @@ app.use('/api/tbt/p', tbtPublicRouter);   // operative talk links, no login
 app.use('/api/tbt', tbtRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/invite', inviteRouter);
+app.use('/api/tresor', tresorRoutes);   // Safety Simplified's Tresor dashboard feed (read only, keyed)
 
 app.get('/api/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
