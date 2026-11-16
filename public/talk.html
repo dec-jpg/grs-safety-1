@@ -32,6 +32,9 @@
   ul.ticks li{padding:8px 0 8px 26px;position:relative;border-bottom:1px solid #f0ede7;font-size:14.5px}
   ul.ticks li:last-child{border-bottom:none}
   ul.ticks li::before{content:'\2713';position:absolute;left:2px;color:var(--grs);font-weight:800}
+  .fig{margin:14px 0 0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--paper)}
+  .fig svg{display:block;width:100%;height:auto}
+  .fig figcaption{font-size:13px;color:var(--muted);padding:9px 12px;border-top:1px solid var(--line);background:#fff;line-height:1.5}
   .slab{background:var(--alarm);color:#fff;font-weight:800;text-align:center;padding:20px 18px;border-radius:12px;margin:0 0 16px;font-size:17px;line-height:1.5;letter-spacing:.03em}
   .qblock{border:1.5px solid var(--line);border-radius:10px;margin-bottom:12px;padding:12px 14px}
   .qblock.wrong{border-color:var(--alarm);background:var(--alarm-light)}
@@ -78,6 +81,7 @@
 </div>
 
 <script src="/logo.js"></script>
+<script src="/talk-figures.js"></script>
 <script>
 (function(){
   var TOKEN = (location.pathname.split('/')[2] || '').replace(/[^A-Za-z0-9_-]/g, '');
@@ -104,6 +108,10 @@
   function saveWho(w){ try { localStorage.setItem(KEY, JSON.stringify(w)); } catch(e){} }
 
   var TALK = null, attempts = 1;
+  // Extra sign-off details a talk can ask for (see "fields" in the library).
+  var FIELD_LABELS = { employer: 'Employer', delivered_by: 'Toolbox talk delivered by' };
+  var FIELD_MISSING = { employer: 'Enter your employer.', delivered_by: 'Enter the name of the person who delivered this toolbox talk.' };
+  var EXTRA = [];
 
   function state(icon, title, text){
     wrap.innerHTML = '<div class="state"><div class="big">' + icon + '</div><h2>' + esc(title) + '</h2><p>' + esc(text) + '</p></div>';
@@ -121,34 +129,53 @@
     }
     document.title = t.title + ' · GRS Contractors Ltd';
 
+    // A section can carry "figure": a drawing from talk-figures.js shown under its text.
+    function figHtml(key){
+      var f = key && window.__TBT_FIGURES__ && window.__TBT_FIGURES__[key];
+      return f ? '<figure class="fig">' + f.svg + '<figcaption>' + esc(f.caption) + '</figcaption></figure>' : '';
+    }
+    // A section carrying "fields" is the acknowledgement: it goes last, after
+    // the questions, and its fields are asked for on the sign-off form.
+    var isAck = function(s){ return Array.isArray(s.fields) && s.fields.length; };
+    EXTRA = [];
+    (t.sections || []).forEach(function(s){ if (isAck(s)) s.fields.forEach(function(f){ if (FIELD_LABELS[f] && EXTRA.indexOf(f) < 0) EXTRA.push(f); }); });
+
     var num = 0;
-    var sectionsHtml = (t.sections || []).map(function(s){
+    var sectionHtml = function(s){
       if (!s.body || !s.body.trim())
         return '<div class="slab">' + inline(s.heading || '') + '</div>';
       num += 1;
       return '<div class="card"><div class="card-h"><span class="n">' + num + '</span><span>' + esc(s.heading || '') + '</span></div>' +
-             '<div class="card-b">' + bodyHtml(s.body) + '</div></div>';
-    }).join('');
+             '<div class="card-b">' + bodyHtml(s.body) + figHtml(s.figure) + '</div></div>';
+    };
+    var sectionsHtml = (t.sections || []).filter(function(s){ return !isAck(s); }).map(sectionHtml).join('');
 
-    var quizHtml = (t.questions && t.questions.length) ?
-      '<div class="card"><div class="card-h"><span class="n">' + (num + 1) + '</span><span>Check your understanding</span></div><div class="card-b">' +
+    var quizHtml = '';
+    if (t.questions && t.questions.length) {
+      num += 1;
+      quizHtml = '<div class="card"><div class="card-h"><span class="n">' + num + '</span><span>Check your understanding</span></div><div class="card-b">' +
       '<p style="margin-bottom:14px">Every answer needs to be right before you can sign.</p>' +
       t.questions.map(function(x, i){
         return '<div class="qblock" id="q' + i + '"><b>' + (i + 1) + '. ' + esc(x.question) + '</b>' +
           x.options.map(function(o, j){
             return '<label><input type="radio" name="q' + i + '" value="' + j + '"> ' + esc(o) + '</label>';
           }).join('') + '</div>';
-      }).join('') + '</div></div>' : '';
+      }).join('') + '</div></div>';
+    }
+    var ackHtml = (t.sections || []).filter(isAck).map(sectionHtml).join('');
 
     var who = savedWho();
     wrap.innerHTML =
       '<div class="titlecard"><h1>' + esc(h1) + '</h1>' +
       (t.ref || t.intro ? '<div class="meta">' + esc([t.ref, t.intro].filter(Boolean).join(' · ')) + '</div>' : '') + '</div>' +
-      sectionsHtml + quizHtml +
+      sectionsHtml + quizHtml + ackHtml +
       '<div class="card" id="signCard"><div class="card-h"><span class="n">✎</span><span>Sign to confirm</span></div><div class="card-b">' +
       '<div class="note err" id="err"></div>' +
       '<div class="field"><label>First name and surname</label><input id="f_name" autocomplete="name" value="' + esc(who.name || '') + '"></div>' +
       '<div class="field"><label>Mobile number</label><input id="f_phone" type="tel" inputmode="tel" autocomplete="tel" value="' + esc(who.phone || '') + '"></div>' +
+      EXTRA.map(function(f){
+        return '<div class="field"><label>' + FIELD_LABELS[f] + '</label><input id="f_' + f + '" value="' + esc(f === 'employer' ? (who.employer || '') : '') + '"></div>';
+      }).join('') +
       '<div class="ackrow"><input type="checkbox" id="f_ack"><label for="f_ack">I confirm I have read and understood this toolbox talk and will work to it.</label></div>' +
       '<div class="field"><label>Signature</label><canvas id="sigpad"></canvas>' +
       '<div class="sigrow"><span>Sign in the box with your finger</span><button type="button" id="sigclear">Clear</button></div></div>' +
@@ -185,6 +212,11 @@
       var phone = document.getElementById('f_phone').value.trim();
       if (!name || name.split(/\s+/).length < 2) return showErr('Enter your first name and surname.');
       if (phone.replace(/\D/g, '').length < 10) return showErr('Enter your mobile number.');
+      var extra = {};
+      for (var k = 0; k < EXTRA.length; k++) {
+        extra[EXTRA[k]] = document.getElementById('f_' + EXTRA[k]).value.trim();
+        if (!extra[EXTRA[k]]) return showErr(FIELD_MISSING[EXTRA[k]]);
+      }
 
       var answers = [];
       if (TALK.questions && TALK.questions.length) {
@@ -202,7 +234,8 @@
       btn.disabled = true; btn.textContent = 'Recording…';
       fetch('/api/tbt/p/' + TOKEN + '/sign', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name, phone: phone, answers: answers, attempts: attempts, signature: pad.toDataURL('image/png') })
+        body: JSON.stringify({ name: name, phone: phone, answers: answers, attempts: attempts, signature: pad.toDataURL('image/png'),
+          employer: extra.employer || '', delivered_by: extra.delivered_by || '' })
       }).then(function(r){ return r.json().then(function(d){ return { ok: r.ok, d: d }; }); })
       .then(function(res){
         var d = res.d || {};
@@ -216,7 +249,7 @@
           return;
         }
         if (!res.ok) throw new Error(d.error || 'Could not record your sign-off. Check your signal and try again.');
-        saveWho({ name: name, phone: phone });
+        saveWho({ name: name, phone: phone, employer: extra.employer || savedWho().employer || '' });
         document.getElementById('signCard').style.display = 'none';
         document.getElementById('doneCard').style.display = 'block';
         document.getElementById('doneText').textContent = d.already

@@ -1,5 +1,5 @@
 {
-  "comment": "The GRS toolbox talk library. Produced by Safety Simplified Ltd; talks are issued from the portal, each issue getting its own link and register. A new talk added here arrives with the next deploy. Body text: blank lines split paragraphs, lines starting with '• ' render as tick bullets, **text** renders bold. A section with an empty body renders as a full-width statement slab. An entry with an issue_token is issued automatically on first boot with that fixed token, so the link is live the moment the deploy lands.",
+  "comment": "The GRS toolbox talk library. Produced by Safety Simplified Ltd; talks are issued from the portal, each issue getting its own link and register. A new talk added here arrives with the next deploy. Body text: blank lines split paragraphs, lines starting with '• ' render as tick bullets, **text** renders bold. A section with an empty body renders as a full-width statement slab. An entry with an issue_token is issued automatically on first boot with that fixed token, so the link is live the moment the deploy lands. A section can carry \"figure\": \"<key>\" to draw an illustration from public/talk-figures.js under its text. A section can carry \"fields\": [\"employer\", \"delivered_by\"]: it is shown last as the acknowledgement, and the sign-off form asks for those extra details.",
   "talks": [
     {
       "ref": "GRS-TBT-EXZ-01",
@@ -36,6 +36,110 @@
         {
           "heading": "Acknowledgement",
           "body": "I understand that excavation must not take place within a designated NO DIG ZONE without the required authorisation. I will follow the RAMS, permit-to-dig requirements and supervisor instructions, and stop work if I am uncertain."
+        }
+      ]
+    },
+    {
+      "ref": "GRS-TBT-KPL-01",
+      "title": "Safe Handling of Kerbs and Working Around Excavators and Mobile Plant",
+      "category": "Toolbox talk",
+      "issue_token": "kpl-x8r4t2nw",
+      "intro": "Issued following a recent HSE site visit. Read this talk in full, answer the three questions, then sign the acknowledgement at the bottom. It applies to everyone who handles kerbs or works near excavators, plant and vehicles on GRS sites.",
+      "questions": [
+        {
+          "question": "When installing heavy concrete kerbs, what handling method should be used wherever reasonably practicable?",
+          "options": [
+            "Two operatives lifting the kerb by hand",
+            "A suitable mechanical kerb lifter or other approved mechanical handling equipment",
+            "One operative lifting by hand, bending the knees",
+            "Whichever method is quickest on the day"
+          ],
+          "answer": 1
+        },
+        {
+          "question": "Is it ever acceptable to stand beneath an excavator bucket?",
+          "options": [
+            "Yes, if the operator knows you are there",
+            "Yes, if it is only for a few seconds",
+            "No. Never, under any circumstances",
+            "Yes, if you are wearing hi-vis and a hard hat"
+          ],
+          "answer": 2
+        },
+        {
+          "question": "What must happen before an operative approaches or enters an excavator's controlled working area?",
+          "options": [
+            "Communication is established with the operator, the operator confirms it is safe, and the excavator is brought to a safe stop with the attachment lowered",
+            "The operative waves and walks in while the machine keeps working",
+            "The operative puts on hi-vis and approaches from behind",
+            "The operative waits until the bucket is facing the other way"
+          ],
+          "answer": 0
+        }
+      ],
+      "sections": [
+        {
+          "heading": "Why This Talk Has Been Issued",
+          "body": "During a recent site visit, the Health and Safety Executive (HSE) gave verbal advice on two areas of our work. No formal enforcement action was taken.\n\n• **Kerb handling.** Heavy kerbs, including 6 x 5 kerbs, need suitable mechanical kerb-lifting equipment for handling and installation.\n• **Excavator danger zones.** Operatives must stay out of the excavator's working area and must never be beneath or close to a raised bucket. People on foot and plant must be kept apart.\n\nNobody is named or blamed in this talk. It sets out the standard that applies on every GRS site, every day."
+        },
+        {
+          "heading": "Handling Kerbs: The Risks",
+          "body": "A concrete kerb typically weighs between 40 and 70 kg, and some weigh more. That is far more than anyone should lift by hand, and kerb laying means repeating the lift all shift.\n\n• **Back, shoulder and knee injuries** from lifting, twisting and lowering heavy kerbs. The damage builds up over time and can finish a career.\n• **Crushed fingers and trapped hands** between the kerb and the bed, the next kerb or the pack.\n• **Crushed feet** from a dropped or sliding kerb.\n• **Uncontrolled movement** when a kerb slips from a grip, swings on the lifter or topples from the pack."
+        },
+        {
+          "heading": "Kerbs: How We Handle and Install Them",
+          "figure": "kerb-lifter",
+          "body": "• **Use a mechanical kerb lifter**, or other approved mechanical handling equipment, wherever reasonably practicable.\n• **Match the lifter to the kerb.** The equipment must suit the dimensions and weight of the kerb being laid.\n• **Check it before use:** condition, compatibility with the machine and the kerb, safe working load, and that its inspection and thorough examination are in date.\n• **Trained and competent operatives only.** If you have not been trained on the lifter in use, do not use it.\n• **Keep hands and feet clear of pinch points.** Never put your fingers beneath a kerb while it is being positioned.\n• **Set up a stable working area** with firm, level footing and room to work, and keep clear communication between everyone in the gang.\n• **No lifting heavy kerbs by hand** where the risk assessment says mechanical assistance is needed.\n• **Follow the approved RAMS.** If suitable equipment is not available, stop work and tell your supervisor."
+        },
+        {
+          "heading": "NO SUITABLE KERB LIFTER ON SITE? STOP WORK AND SPEAK TO YOUR SUPERVISOR",
+          "body": ""
+        },
+        {
+          "heading": "Excavators: The Risks",
+          "body": "An excavator can slew, track or lower its bucket faster than you can get out of the way, and the operator cannot see all the way round the machine.\n\n• **Slewing.** The body and counterweight swing round and can crush you against the machine, a wall, a vehicle or a stack of materials.\n• **Reversing and tracking.** The machine can move off in any direction with very little warning.\n• **Bucket and attachments.** They can move or drop without warning if a hose fails, a quick hitch releases or a control is knocked.\n• **Suspended loads.** Loads can swing, slip or fall.\n• **Restricted visibility.** Blind spots around the cab, boom and counterweight mean the operator may have no idea you are there."
+        },
+        {
+          "heading": "NEVER STAND, WALK OR WORK BENEATH AN EXCAVATOR BUCKET OR A SUSPENDED LOAD",
+          "body": ""
+        },
+        {
+          "heading": "Never Beneath the Bucket",
+          "figure": "under-bucket",
+          "body": "**It is never acceptable to stand, walk or work beneath an excavator bucket, an attachment or a suspended load.** Not for a few seconds, not to check a level, and not to guide a kerb, pipe or chamber ring into place.\n\nIf a job appears to need someone beneath the bucket, the method is wrong. Stop and speak to your supervisor."
+        },
+        {
+          "heading": "Excavator Exclusion Zones",
+          "figure": "exclusion-zone",
+          "body": "• **Stay outside the excavator's designated exclusion zone** whenever it is operating.\n• **Never approach a working excavator** until you have made contact with the operator and the operator has confirmed it is safe to approach.\n• **Machine stopped first.** The excavator must be brought to a safe stop, with the attachment lowered to a safe position where appropriate, before anyone enters the controlled working area.\n• **Banksman or plant marshal** in place wherever the risk assessment and site arrangements require one.\n• **Keep people on foot and working plant apart** at all times.\n• **Do not assume the operator has seen you.**\n• **Operators: stop immediately** if an unauthorised person enters the exclusion zone."
+        },
+        {
+          "heading": "Working Safely Around Plant and Vehicles",
+          "body": "• **Pedestrian routes.** Use the designated pedestrian routes and plant crossing points. No short cuts through plant working areas.\n• **Physical barriers.** People and plant are separated by suitable physical barriers wherever reasonably practicable. Do not move or step over them.\n• **Reversing.** Reversing is kept to a minimum and is controlled where visibility is restricted. Never walk behind a reversing vehicle.\n• **Deliveries.** Delivery vehicles are met and directed to the unloading area. Stay clear while a vehicle is manoeuvring and while a load is being lifted off.\n• **Safe distances.** Keep well away from moving vehicles and never squeeze between a vehicle and a fixed object.\n• **Signals.** Use the agreed communication and signalling procedures. If you do not understand a signal, stop.\n• **Daily briefings.** Where plant movements or work activities change, the change is briefed before work starts.\n• **Supervision.** Supervisors monitor the work and will step in when they see unsafe practice.\n\n**Hi-vis clothing helps you be seen. It does not replace physical segregation or a safe system of work.**"
+        },
+        {
+          "heading": "Who Is Responsible for What",
+          "body": "**Site management**\n\n• Plan the work so that kerbs are handled mechanically and people on foot are kept apart from plant.\n• Provide suitable kerb-lifting equipment, barriers and trained people before the work starts.\n\n**Supervisors**\n\n• Brief the RAMS, set up and maintain the exclusion zones and pedestrian routes, and check the kerb lifter is on site and in date.\n• Monitor the work and stop any unsafe practice straight away.\n\n**Plant operators**\n\n• Complete daily checks and operate only within the agreed working area.\n• Stop the machine and lower the attachment before anyone approaches.\n• Stop immediately if anyone enters the exclusion zone.\n\n**Groundworkers**\n\n• Use the kerb lifter provided and keep hands and feet clear.\n• Stay out of exclusion zones and never go beneath a bucket or a suspended load.\n• Stop and report anything unsafe."
+        },
+        {
+          "heading": "Immediate Actions",
+          "body": "• **Review the RAMS** for kerb laying and for work around excavators and plant.\n• **Confirm suitable kerb-lifting equipment is available** on every site where kerbs are being laid.\n• **Check plant exclusion arrangements:** exclusion zones, barriers, pedestrian routes, crossing points and banksman cover.\n• **Brief every affected operative** using this talk and record their acknowledgement.\n\n**Any unsafe activity stops until suitable controls have been put in place.**"
+        },
+        {
+          "heading": "UNSAFE WORK STOPS UNTIL SUITABLE CONTROLS ARE IN PLACE",
+          "body": ""
+        },
+        {
+          "heading": "HSE Guidance Behind This Talk",
+          "body": "• HSE Construction Information Sheet CIS57, Handling kerbs: Reducing the risk of musculoskeletal disorders.\n• HSE guidance, Construction manual handling: Kerbs and paving.\n• HSE HSG144, The safe use of vehicles on construction sites.\n• HSE guidance, Excavators: exclusion, clearance, visibility and the need for a signaller."
+        },
+        {
+          "heading": "Operative Acknowledgement",
+          "fields": [
+            "employer",
+            "delivered_by"
+          ],
+          "body": "I confirm that I have received and understood this briefing. I know the safe working practices required for handling and installing kerbs and for working around excavators, plant and vehicles. I understand that it is my responsibility to stop work and report any unsafe activity."
         }
       ]
     }

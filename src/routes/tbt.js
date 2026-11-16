@@ -61,6 +61,9 @@ const ensure = () => ready || (ready = (async () => {
   // Mobile number on the People register: filled in as the office links
   // signatures, so matching gets better the more the system is used.
   await query(`ALTER TABLE operatives ADD COLUMN IF NOT EXISTS phone TEXT`);
+  // Extra sign-off details a talk can ask for (a section carrying "fields").
+  await query(`ALTER TABLE talk_signoffs ADD COLUMN IF NOT EXISTS employer TEXT`);
+  await query(`ALTER TABLE talk_signoffs ADD COLUMN IF NOT EXISTS delivered_by TEXT`);
 
   // Library talks in the build are added on boot if not already there
   // (matched on title), so new talks arrive with a redeploy.
@@ -140,13 +143,17 @@ tbtPublicRouter.post('/:token/sign', wrap(async (req, res) => {
   const answers = Array.isArray(b.answers) ? b.answers : [];
   const wrong = (t.questions || []).map((x, i) => (Number(answers[i]) === Number(x.answer) ? null : i)).filter(i => i !== null);
   if (wrong.length) return res.json({ ok: false, wrong });
+  const wanted = (t.sections || []).flatMap(s => (Array.isArray(s.fields) ? s.fields : []));
+  const employer = clean(b.employer, 120), deliveredBy = clean(b.delivered_by, 120);
+  if (wanted.includes('employer') && !employer) return res.status(400).json({ error: 'Enter your employer.' });
+  if (wanted.includes('delivered_by') && !deliveredBy) return res.status(400).json({ error: 'Enter the name of the person who delivered this toolbox talk.' });
   if (!validImage(b.signature, 400_000)) return res.status(400).json({ error: 'Sign in the box to confirm.' });
   const op = await findOperative(name, phone);
   if (await alreadySigned(t.id, op, name, phone)) return res.json({ ok: true, already: true });
-  await query(`INSERT INTO talk_signoffs (talk_id, operative_id, name_given, phone_given, signature, attempts)
-      VALUES ($1,$2,$3,$4,$5,$6)`,
+  await query(`INSERT INTO talk_signoffs (talk_id, operative_id, name_given, phone_given, signature, attempts, employer, delivered_by)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
     [t.id, op ? op.id : null, op ? op.name : name, phone || (op && op.phone) || null,
-     b.signature, Math.max(1, parseInt(b.attempts, 10) || 1)]);
+     b.signature, Math.max(1, parseInt(b.attempts, 10) || 1), employer || null, deliveredBy || null]);
   res.json({ ok: true });
 }));
 
@@ -191,7 +198,7 @@ tbtRouter.get('/talks/:id', wrap(async (req, res) => {
   const talk = await one(`SELECT * FROM talks WHERE id = $1 AND status <> 'library'`, [req.params.id]);
   if (!talk) return res.status(404).json({ error: 'Not found' });
   talk.url = `${req.protocol}://${req.get('host')}/t/${talk.token}`;
-  const { rows: signoffs } = await query(`SELECT s.id, s.operative_id, s.name_given, s.phone_given, s.attempts, s.signed_at,
+  const { rows: signoffs } = await query(`SELECT s.id, s.operative_id, s.name_given, s.phone_given, s.attempts, s.signed_at, s.employer, s.delivered_by,
       o.name AS op_name, o.company AS op_company
       FROM talk_signoffs s LEFT JOIN operatives o ON o.id = s.operative_id
       WHERE s.talk_id = $1 ORDER BY s.signed_at`, [talk.id]);

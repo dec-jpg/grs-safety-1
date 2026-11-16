@@ -68,10 +68,10 @@
       const rows = d.signoffs.map(s => `
         <tr><td><div class="site-name" style="font-size:13px">${esc(s.op_name || s.name_given)}</div>
           <div class="site-meta">${s.operative_id
-            ? esc(s.op_company || 'On the People register')
-            : `not on the register${canEdit() ? ` · <a href="javascript:void 0" onclick="tbtLink(${s.id},${t.id})" style="color:var(--grs)">link</a>` : ''}`}</div></td>
+            ? esc(s.employer || s.op_company || 'On the People register')
+            : `${s.employer ? esc(s.employer) + ' · ' : ''}not on the register${canEdit() ? ` · <a href="javascript:void 0" onclick="tbtLink(${s.id},${t.id})" style="color:var(--grs)">link</a>` : ''}`}</div></td>
         <td style="font-size:12px;color:var(--muted)">${esc(s.phone_given || '')}</td>
-        <td style="font-size:12px;color:var(--muted);white-space:nowrap">${fmtDT(s.signed_at)}${s.attempts > 1 ? ` · ${s.attempts} tries` : ''}</td>
+        <td style="font-size:12px;color:var(--muted);white-space:nowrap">${fmtDT(s.signed_at)}${s.attempts > 1 ? ` · ${s.attempts} tries` : ''}${s.delivered_by ? `<div style="white-space:normal">Delivered by ${esc(s.delivered_by)}</div>` : ''}</td>
         <td><img src="/api/tbt/signoffs/${s.id}/signature" alt="signature" style="height:26px"></td>
         <td class="num">${canEdit() ? `<a href="javascript:void 0" onclick="tbtRemoveSig(${s.id},${t.id})" style="color:var(--muted);font-size:11.5px">remove</a>` : ''}</td></tr>`).join('');
 
